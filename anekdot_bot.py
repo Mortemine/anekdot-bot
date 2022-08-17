@@ -25,7 +25,9 @@ def send_to_admin(message):
     if message.text == 'Назад':
         to_start(message)
     else:
-        bot.send_message(409197843, message.text)
+        bot.send_message(409197843, f'Поступил запрос от @{message.from_user.username} из чата №{message.chat.id}'
+                                    f' с сообщением:\n'
+                                    f'{message.text}')
         bot.send_message(message.chat.id, 'Ваш запрос был отправлен администрации!')
 
 # def make_buttons(message, button_values, message_text):
