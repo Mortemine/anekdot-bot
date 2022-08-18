@@ -3,22 +3,22 @@ from telebot import types
 import requests
 from bs4 import BeautifulSoup
 
-token = ''
+token = '5442193240:AAEsEpOlGEFn2qL02ysFJtf9ktiVc267_38'
 bot = telebot.TeleBot(token)
+url = 'https://baneks.site/random'
+previous_anek = {}
 
 
 def get_random_anek(message):
-    global previous_anek
-    url = 'https://baneks.ru/random'
     response = requests.get(url)
     soup = BeautifulSoup(response.text, 'html.parser')
-    description = soup.find('meta', attrs={'name': 'og:description'}) or \
-                  soup.find('meta', attrs={'property': 'description'}) or \
-                  soup.find('meta', attrs={'name': 'description'})
+    for e in soup.findAll('br'):
+        e.replaceWith('\n')
+    anek = soup.find('p').get_text('')
     keyboard = types.InlineKeyboardMarkup()
     next_button = types.InlineKeyboardButton('Следующий!', callback_data='next')
     keyboard.add(next_button)
-    previous_anek = bot.send_message(message.from_user.id, description.get('content'), reply_markup=keyboard).message_id
+    previous_anek[message.from_user.id] = bot.send_message(message.from_user.id, anek, reply_markup=keyboard).message_id
 
 
 def send_to_admin(message):
@@ -70,7 +70,7 @@ def dialog_start(message):
 def callback_handler(call):
     if call.data == 'next':
         try:
-            bot.delete_message(call.from_user.id, previous_anek)
+            bot.delete_message(call.from_user.id, previous_anek[call.from_user.id])
         except BaseException:
             pass
         get_random_anek(call)
