@@ -3,7 +3,7 @@ from telebot import types
 import requests
 from bs4 import BeautifulSoup
 
-token = ''
+token = '5442193240:AAEsEpOlGEFn2qL02ysFJtf9ktiVc267_38'
 bot = telebot.TeleBot(token)
 url = 'https://baneks.site/random'
 previous_anek = {}
@@ -68,7 +68,7 @@ def dialog_start(message):
 
 @bot.callback_query_handler(lambda call: True)
 def callback_handler(call):
-    if call.data == 'next':
+    if call.aneks == 'next':
         try:
             bot.delete_message(call.from_user.id, previous_anek[call.from_user.id])
         except BaseException:
