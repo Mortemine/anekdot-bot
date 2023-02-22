@@ -68,7 +68,7 @@ def dialog_start(message):
 
 @bot.callback_query_handler(lambda call: True)
 def callback_handler(call):
-    if call.aneks == 'next':
+    if call.data == 'next':
         try:
             bot.delete_message(call.from_user.id, previous_anek[call.from_user.id])
         except BaseException:

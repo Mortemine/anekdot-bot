@@ -4,6 +4,7 @@ from sqlalchemy import select
 from base import Base
 from categories import Categories
 from anek import Anek
+import random
 
 engine = create_engine("sqlite://", echo=True)
 Base.metadata.create_all(engine)
@@ -32,15 +33,20 @@ with Session(engine) as session:
             except IndexError:
                 pass
             text_start = line.find(',') + 2
-            anek_text = line[text_start:].replace(r'\n', '\n')
+            anek_text = line[text_start:]
             anek = Anek(
                 category=category_id,
                 text=anek_text
             )
             session.add(anek)
         session.commit()
-
-    stmt = select(Anek).where(Anek.id.is_(10))
+    anek_type = 34
+    anek_ids = [anek_id for anek_id in session.scalars(select(Anek.id).where(Anek.category.is_(anek_type)))]
+    min_anek_id = min(anek_ids)
+    max_anek_id = max(anek_ids)
+    stmt = select(Anek).where(Anek.category.is_(anek_type)).where(Anek.id.is_(random.randint(min_anek_id, max_anek_id)))
 
     for anek in session.scalars(stmt):
-        print(anek)
+        print('\n')
+        print(anek.text.replace(r'\n', '\n'))
+        print('\n')
