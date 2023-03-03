@@ -1,15 +1,16 @@
-from database.base import Base
-from sqlalchemy.orm import Mapped
-from sqlalchemy.orm import mapped_column
+from database import BASE
 from sqlalchemy import ForeignKey
+from sqlalchemy import Column, Integer, String
 
 
-class Anek(Base):
+class Anek(BASE):
     __tablename__ = 'anekdots'
-
-    id: Mapped[int] = mapped_column(primary_key=True, nullable=False, autoincrement=True)
-    category: Mapped[int] = mapped_column(ForeignKey("categories.id"), nullable=False)
-    text: Mapped[str] = mapped_column(nullable=False)
+    anek_id = Column(Integer, primary_key=True, nullable=False, autoincrement=True)
+    category = Column(Integer, ForeignKey("categories.cat_id"), nullable=False)
+    text = Column(String, nullable=False)
 
     def __repr__(self) -> str:
-        return f'Anek(id={self.id!r}, category={self.category!r}, text={self.text!r})'
+        return f'Anek(id={self.anek_id!r}, category={self.category!r}, text={self.text!r})'
+
+
+Anek.__table__.create(checkfirst=True, bind=BASE.metadata.bind)

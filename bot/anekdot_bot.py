@@ -2,14 +2,13 @@ import requests
 import telebot
 from bs4 import BeautifulSoup
 from telebot import types
+import database.model as model
 
-from database.model import Model
 
 token = '5442193240:AAEsEpOlGEFn2qL02ysFJtf9ktiVc267_38'
 bot = telebot.TeleBot(token)
 url = 'https://baneks.site/random'
 previous_anek = {}
-model = Model()
 model.start_session()
 
 print('Database successfully loaded')
@@ -102,10 +101,16 @@ def text_message(message):
         bot.register_next_step_handler(message, send_to_admin)
     elif message.text == 'Назад':
         to_start(message)
-    elif message.text in ('Штирлиц', 'Чукча', 'Петька и Василий Иванович'):
-        bot.send_message(message.chat.id, 'Тут пока ничего нет...')
+    #elif message.text in ('Штирлиц', 'Чукча', 'Петька и Василий Иванович'):
+    #    bot.send_message(message.chat.id, 'Тут пока ничего нет...')
     elif message.text == 'Вовочка':
         bot.send_message(message.chat.id, model.get_random_anek(message.text))
+    elif message.text == 'Чукча':
+        bot.send_message(message.chat.id, model.get_random_anek(message.text))
+    elif message.text == 'Штирлиц':
+        bot.send_message(message.chat.id, model.get_random_anek(message.text))
+    elif message.text == 'Все':
+        model.get_all_aneks()
 
 
 while True:

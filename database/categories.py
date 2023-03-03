@@ -1,14 +1,15 @@
-from database.base import Base
-from sqlalchemy.orm import Mapped
-from sqlalchemy.orm import mapped_column
+from database import BASE
+from sqlalchemy import Column, Integer, String
 
 
-class Categories(Base):
+class Categories(BASE):
     __tablename__ = 'categories'
 
-    id: Mapped[int] = mapped_column(primary_key=True, nullable=False)
-    name: Mapped[str] = mapped_column(nullable=False)
+    cat_id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
 
     def __repr__(self) -> str:
-        return f'Categories(id={self.id!r}, name={self.name!r})'
-    
+        return f'Categories(cat_id={self.cat_id!r}, name={self.name!r})'
+
+
+Categories.__table__.create(checkfirst=True, bind=BASE.metadata.bind)
