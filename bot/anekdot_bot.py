@@ -6,7 +6,7 @@ import database.model as model
 
 
 token = '5442193240:AAEsEpOlGEFn2qL02ysFJtf9ktiVc267_38'
-bot = telebot.TeleBot(token)
+bot = telebot.TeleBot(token, threaded=False)
 url = 'https://baneks.site/random'
 previous_anek = {}
 model.start_session()
@@ -36,11 +36,13 @@ def send_to_admin(message):
         bot.send_message(message.chat.id, 'Ваш запрос был отправлен администрации!')
 
 
-# def make_buttons(message, button_values, message_text):
-#    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-#    for value in button_values:
-#        markup.add(types.KeyboardButton(value))
-#    bot.send_message(message.chat.id, message_text, reply_markup=markup)
+def make_buttons(message, button_values, message_text):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    for value in button_values:
+        markup.add(types.KeyboardButton(value))
+    back_button = types.KeyboardButton('Назад')
+    markup.add(back_button)
+    bot.send_message(message.chat.id, message_text, reply_markup=markup)
 
 
 def start_dialog_buttons():
@@ -86,13 +88,9 @@ def callback_handler(call):
 def text_message(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     back_button = types.KeyboardButton('Назад')
+    categories = model.get_all_categories()
     if message.text == "Анекдоты по категориям":
-        shtirlitz_button = types.KeyboardButton('Штирлиц')
-        vovochka_button = types.KeyboardButton('Вовочка')
-        chuckcha_button = types.KeyboardButton('Чукча')
-        petka_button = types.KeyboardButton('Петька и Василий Иванович')
-        markup.add(shtirlitz_button, vovochka_button, chuckcha_button, petka_button, back_button)
-        bot.send_message(message.chat.id, 'Выберите категорию', reply_markup=markup)
+        make_buttons(message, categories,'Выберите категорию')
     elif message.text == 'Случайный анекдот':
         get_random_anek(message)
     elif message.text == 'Связь с администрацией':
@@ -101,16 +99,8 @@ def text_message(message):
         bot.register_next_step_handler(message, send_to_admin)
     elif message.text == 'Назад':
         to_start(message)
-    #elif message.text in ('Штирлиц', 'Чукча', 'Петька и Василий Иванович'):
-    #    bot.send_message(message.chat.id, 'Тут пока ничего нет...')
-    elif message.text == 'Вовочка':
+    elif message.text in categories:
         bot.send_message(message.chat.id, model.get_random_anek(message.text))
-    elif message.text == 'Чукча':
-        bot.send_message(message.chat.id, model.get_random_anek(message.text))
-    elif message.text == 'Штирлиц':
-        bot.send_message(message.chat.id, model.get_random_anek(message.text))
-    elif message.text == 'Все':
-        model.get_all_aneks()
 
 
 while True:

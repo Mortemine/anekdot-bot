@@ -1,6 +1,5 @@
 import random
 
-from sqlalchemy import select
 
 from database.categories import Categories
 from database.anek import Anek
@@ -8,23 +7,13 @@ from database import SESSION
 
 
 def get_random_anek(anek_type):
-    # select_anek_category_id = select(Categories.cat_id).where(Categories.name == anek_type)
     category_id = SESSION.query(Categories.cat_id).filter(Categories.name == anek_type).one()[0]
     anek_ids = SESSION.query(Anek.anek_id).filter(Anek.category == category_id).all()
-    # select(Anek.anek_id).where(Anek.category == category_id))]
-    min_anek_id = min(anek_ids[0])
-    max_anek_id = max(anek_ids[0])
-    # select_anek_by_type = select(Anek).where(Anek.category == category_id).where(
-    #    Anek.anek_id == random.randint(min_anek_id, max_anek_id))
+    min_anek_id = min(anek_ids)[0]
+    max_anek_id = max(anek_ids)[0]
     random_id = random.randint(min_anek_id, max_anek_id)
     anek = SESSION.query(Anek.text).filter(Anek.category == category_id).filter(Anek.anek_id == random_id).one()[0]
-    # select_anek_by_type).one().text
-    print(anek)
     return anek.replace(r'\n', '\n')
-
-
-def get_all_aneks():
-    print(SESSION.query(Anek).all())
 
 
 def create_categories_table():
@@ -61,6 +50,11 @@ def create_anek_table():
             )
             SESSION.add(anek)
         SESSION.commit()
+
+
+def get_all_categories():
+    categories = [name[0] for name in SESSION.query(Categories.name).order_by(Categories.name).all()]
+    return categories
 
 
 def start_session():
