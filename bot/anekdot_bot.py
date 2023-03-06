@@ -90,7 +90,7 @@ def text_message(message):
     back_button = types.KeyboardButton('Назад')
     categories = model.get_all_categories()
     if message.text == "Анекдоты по категориям":
-        make_buttons(message, categories,'Выберите категорию')
+        make_buttons(message, categories, 'Выберите категорию')
     elif message.text == 'Случайный анекдот':
         get_random_anek(message)
     elif message.text == 'Связь с администрацией':

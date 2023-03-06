@@ -13,7 +13,7 @@ def get_random_anek(anek_type):
     max_anek_id = max(anek_ids)[0]
     random_id = random.randint(min_anek_id, max_anek_id)
     anek = SESSION.query(Anek.text).filter(Anek.category == category_id).filter(Anek.anek_id == random_id).one()[0]
-    return anek.replace(r'\n', '\n')
+    return anek.replace(r'\n', '\n').replace('&quot', '\n')
 
 
 def create_categories_table():
