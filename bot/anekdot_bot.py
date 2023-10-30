@@ -5,7 +5,7 @@ from telebot import types
 import database.model as model
 
 
-token = '5442193240:AAEsEpOlGEFn2qL02ysFJtf9ktiVc267_38'
+token = ''
 bot = telebot.TeleBot(token, threaded=False)
 url = 'https://baneks.site/random'
 previous_anek = {}
