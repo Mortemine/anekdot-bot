@@ -48,7 +48,7 @@ export function AccountPanel({ user, onAuthenticated, onLogout }: AccountPanelPr
           </div>
         </dl>
 
-        <p className="muted">Лайки и отправленные анекдоты доступны в соответствующих разделах.</p>
+        <p className="muted">Понравившиеся и избранные анекдоты доступны в соответствующих разделах.</p>
       </section>
     );
   }

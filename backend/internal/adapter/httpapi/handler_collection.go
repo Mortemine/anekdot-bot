@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -10,16 +11,35 @@ import (
 	"github.com/alexey/anekdot-bot/backend/internal/usecase"
 )
 
-type LikeHandler struct {
-	service *usecase.AnekdotService
-	logger  *slog.Logger
+type anekdotCollection struct {
+	resource string
+	list     func(ctx context.Context, userID int64) ([]domain.Anekdot, error)
+	add      func(ctx context.Context, userID, anekdotID int64) error
+	remove   func(ctx context.Context, userID, anekdotID int64) error
+	logger   *slog.Logger
 }
 
-func NewLikeHandler(service *usecase.AnekdotService, logger *slog.Logger) *LikeHandler {
-	return &LikeHandler{service: service, logger: logger}
+func NewLikeHandler(service *usecase.AnekdotService, logger *slog.Logger) *anekdotCollection {
+	return &anekdotCollection{
+		resource: "likes",
+		list:     service.Likes,
+		add:      service.AddLike,
+		remove:   service.RemoveLike,
+		logger:   logger,
+	}
 }
 
-func (h *LikeHandler) List(w http.ResponseWriter, r *http.Request) {
+func NewFavoriteHandler(service *usecase.AnekdotService, logger *slog.Logger) *anekdotCollection {
+	return &anekdotCollection{
+		resource: "favorites",
+		list:     service.Favorites,
+		add:      service.AddFavorite,
+		remove:   service.RemoveFavorite,
+		logger:   logger,
+	}
+}
+
+func (h *anekdotCollection) List(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "Требуется вход в аккаунт.")
@@ -27,17 +47,17 @@ func (h *LikeHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	likes, err := h.service.Likes(r.Context(), user.ID)
+	anekdots, err := h.list(r.Context(), user.ID)
 	if err != nil {
 		h.handleError(w, r, err)
 
 		return
 	}
 
-	writeJSON(w, http.StatusOK, anekdotsResponse{Anekdots: toAnekdotsDTO(likes)})
+	writeJSON(w, http.StatusOK, anekdotsResponse{Anekdots: toAnekdotsDTO(anekdots)})
 }
 
-func (h *LikeHandler) Add(w http.ResponseWriter, r *http.Request) {
+func (h *anekdotCollection) Add(w http.ResponseWriter, r *http.Request) {
 	anekdotID, ok := h.anekdotID(w, r)
 	if !ok {
 		return
@@ -50,7 +70,7 @@ func (h *LikeHandler) Add(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.AddLike(r.Context(), user.ID, anekdotID); err != nil {
+	if err := h.add(r.Context(), user.ID, anekdotID); err != nil {
 		h.handleError(w, r, err)
 
 		return
@@ -59,7 +79,7 @@ func (h *LikeHandler) Add(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *LikeHandler) Remove(w http.ResponseWriter, r *http.Request) {
+func (h *anekdotCollection) Remove(w http.ResponseWriter, r *http.Request) {
 	anekdotID, ok := h.anekdotID(w, r)
 	if !ok {
 		return
@@ -72,7 +92,7 @@ func (h *LikeHandler) Remove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.RemoveLike(r.Context(), user.ID, anekdotID); err != nil {
+	if err := h.remove(r.Context(), user.ID, anekdotID); err != nil {
 		h.handleError(w, r, err)
 
 		return
@@ -81,7 +101,7 @@ func (h *LikeHandler) Remove(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *LikeHandler) anekdotID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+func (h *anekdotCollection) anekdotID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	anekdotID, err := strconv.ParseInt(r.PathValue("anekdot_id"), 10, 64)
 	if err != nil || anekdotID <= 0 {
 		writeError(w, http.StatusBadRequest, "invalid_input", "Идентификатор анекдота должен быть положительным числом.")
@@ -92,11 +112,11 @@ func (h *LikeHandler) anekdotID(w http.ResponseWriter, r *http.Request) (int64, 
 	return anekdotID, true
 }
 
-func (h *LikeHandler) handleError(w http.ResponseWriter, r *http.Request, err error) {
+func (h *anekdotCollection) handleError(w http.ResponseWriter, r *http.Request, err error) {
 	if !isExpectedError(err) {
 		h.logger.ErrorContext(
 			r.Context(),
-			"likes request failed",
+			h.resource+" request failed",
 			"error", err,
 			"path", r.URL.Path,
 			"request_id", requestIDFromContext(r.Context()),

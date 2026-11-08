@@ -205,7 +205,7 @@ func (s *sessionStub) Delete(_ context.Context, tokenHash string) error {
 	return nil
 }
 
-type likeStub struct {
+type reactionStub struct {
 	list      []domain.Anekdot
 	addErr    error
 	removeErr error
@@ -213,11 +213,11 @@ type likeStub struct {
 	removed   []int64
 }
 
-func (s *likeStub) List(context.Context, int64) ([]domain.Anekdot, error) {
+func (s *reactionStub) List(context.Context, int64) ([]domain.Anekdot, error) {
 	return s.list, nil
 }
 
-func (s *likeStub) Add(_ context.Context, _, anekdotID int64) error {
+func (s *reactionStub) Add(_ context.Context, _, anekdotID int64) error {
 	if s.addErr != nil {
 		return s.addErr
 	}
@@ -227,7 +227,7 @@ func (s *likeStub) Add(_ context.Context, _, anekdotID int64) error {
 	return nil
 }
 
-func (s *likeStub) Remove(_ context.Context, _, anekdotID int64) error {
+func (s *reactionStub) Remove(_ context.Context, _, anekdotID int64) error {
 	if s.removeErr != nil {
 		return s.removeErr
 	}
@@ -249,7 +249,8 @@ type fixture struct {
 	categories *categoryStub
 	anekdots   *anekdotStub
 	external   *externalStub
-	likes      *likeStub
+	likes      *reactionStub
+	favorites  *reactionStub
 	users      *userStub
 	sessions   *sessionStub
 	pinger     pingerStub
@@ -281,11 +282,12 @@ func newFixture() *fixture {
 			authored:   []domain.Anekdot{{ID: 6, CategoryID: 1, Text: "свой анекдот"}},
 			listed:     []domain.Anekdot{{ID: 3, CategoryID: 1, Text: "первый", LikeCount: 2}},
 		},
-		external: &externalStub{text: "внешний"},
-		likes:    &likeStub{list: []domain.Anekdot{{ID: 4, CategoryID: 1, Text: "лайкнутый", LikeCount: 5}}},
-		users:    users,
-		sessions: &sessionStub{users: users, sessions: map[string]domain.Session{}},
-		pinger:   pingerStub{},
+		external:  &externalStub{text: "внешний"},
+		likes:     &reactionStub{list: []domain.Anekdot{{ID: 4, CategoryID: 1, Text: "лайкнутый", LikeCount: 5}}},
+		favorites: &reactionStub{list: []domain.Anekdot{{ID: 7, CategoryID: 1, Text: "избранный", LikeCount: 3}}},
+		users:     users,
+		sessions:  &sessionStub{users: users, sessions: map[string]domain.Session{}},
+		pinger:    pingerStub{},
 		cfg: &config.Config{
 			HTTPAddr:    ":8080",
 			SessionTTL:  time.Hour,
@@ -301,7 +303,7 @@ func (f *fixture) handler(t *testing.T) http.Handler {
 	handler, err := NewRouter(
 		f.cfg,
 		logger,
-		usecase.NewAnekdotService(f.categories, f.anekdots, f.likes, f.external, logger),
+		usecase.NewAnekdotService(f.categories, f.anekdots, f.likes, f.favorites, f.external, logger),
 		usecase.NewAuthService(f.users, f.sessions, f.cfg.SessionTTL, logger),
 		f.pinger,
 	)
@@ -821,6 +823,91 @@ func TestLikesEndpoints(t *testing.T) {
 		t.Cleanup(func() { f.anekdots.byIDErr = nil })
 
 		recorder := perform(t, handler, http.MethodPut, "/api/v1/likes/99", nil, bearer(token))
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404", recorder.Code)
+		}
+	})
+}
+
+func TestFavoritesRequireToken(t *testing.T) {
+	f := newFixture()
+	handler := f.handler(t)
+
+	cases := []struct {
+		method string
+		target string
+	}{
+		{method: http.MethodGet, target: "/api/v1/favorites"},
+		{method: http.MethodPut, target: "/api/v1/favorites/4"},
+		{method: http.MethodDelete, target: "/api/v1/favorites/4"},
+	}
+
+	for _, test := range cases {
+		recorder := perform(t, handler, test.method, test.target, nil, nil)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("%s %s status = %d, want 401", test.method, test.target, recorder.Code)
+		}
+	}
+}
+
+func TestFavoritesEndpoints(t *testing.T) {
+	f := newFixture()
+	handler := f.handler(t)
+
+	token := f.token(t, handler)
+
+	t.Run("list", func(t *testing.T) {
+		recorder := perform(t, handler, http.MethodGet, "/api/v1/favorites", nil, bearer(token))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+		}
+
+		payload := decodeBody[anekdotsResponse](t, recorder)
+		if len(payload.Anekdots) != 1 || payload.Anekdots[0].ID != 7 {
+			t.Errorf("favorites = %+v", payload.Anekdots)
+		}
+	})
+
+	t.Run("add", func(t *testing.T) {
+		recorder := perform(t, handler, http.MethodPut, "/api/v1/favorites/4", nil, bearer(token))
+		if recorder.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want 204: %s", recorder.Code, recorder.Body.String())
+		}
+
+		if len(f.favorites.added) != 1 || f.favorites.added[0] != 4 {
+			t.Errorf("added = %v, want [4]", f.favorites.added)
+		}
+
+		if len(f.likes.added) != 0 {
+			t.Errorf("likes added = %v, want none", f.likes.added)
+		}
+	})
+
+	t.Run("remove", func(t *testing.T) {
+		recorder := perform(t, handler, http.MethodDelete, "/api/v1/favorites/4", nil, bearer(token))
+		if recorder.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want 204: %s", recorder.Code, recorder.Body.String())
+		}
+
+		if len(f.favorites.removed) != 1 || f.favorites.removed[0] != 4 {
+			t.Errorf("removed = %v, want [4]", f.favorites.removed)
+		}
+	})
+
+	t.Run("invalid id", func(t *testing.T) {
+		for _, target := range []string{"/api/v1/favorites/0", "/api/v1/favorites/abc"} {
+			recorder := perform(t, handler, http.MethodPut, target, nil, bearer(token))
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("PUT %s status = %d, want 400", target, recorder.Code)
+			}
+		}
+	})
+
+	t.Run("missing anecdote", func(t *testing.T) {
+		f.anekdots.byIDErr = domain.ErrNotFound
+		t.Cleanup(func() { f.anekdots.byIDErr = nil })
+
+		recorder := perform(t, handler, http.MethodPut, "/api/v1/favorites/99", nil, bearer(token))
 		if recorder.Code != http.StatusNotFound {
 			t.Fatalf("status = %d, want 404", recorder.Code)
 		}

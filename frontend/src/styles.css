@@ -482,6 +482,12 @@ h2 {
   flex-wrap: wrap;
 }
 
+.anekdot-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .like-button {
   display: inline-flex;
   align-items: center;
@@ -500,9 +506,44 @@ h2 {
     background 0.15s ease;
 }
 
+.favorite-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.favorite-button:hover:not(:disabled) {
+  border-color: #d9a520;
+  color: #d9a520;
+}
+
+.favorite-button-active {
+  border-color: #d9a520;
+  color: #d9a520;
+}
+
 .like-button:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.favorite-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .like-button:disabled {

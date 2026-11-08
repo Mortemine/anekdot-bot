@@ -23,6 +23,7 @@ type AnekdotService struct {
 	categories domain.CategoryRepository
 	anekdots   domain.AnekdotRepository
 	likes      domain.LikeRepository
+	favorites  domain.FavoriteRepository
 	external   domain.ExternalAnekdotSource
 	logger     *slog.Logger
 }
@@ -31,6 +32,7 @@ func NewAnekdotService(
 	categories domain.CategoryRepository,
 	anekdots domain.AnekdotRepository,
 	likes domain.LikeRepository,
+	favorites domain.FavoriteRepository,
 	external domain.ExternalAnekdotSource,
 	logger *slog.Logger,
 ) *AnekdotService {
@@ -38,6 +40,7 @@ func NewAnekdotService(
 		categories: categories,
 		anekdots:   anekdots,
 		likes:      likes,
+		favorites:  favorites,
 		external:   external,
 		logger:     logger,
 	}
@@ -209,6 +212,43 @@ func (s *AnekdotService) RemoveLike(ctx context.Context, userID, anekdotID int64
 
 	if err := s.likes.Remove(ctx, userID, anekdotID); err != nil {
 		return fmt.Errorf("removing like: %w", err)
+	}
+
+	return nil
+}
+
+func (s *AnekdotService) Favorites(ctx context.Context, userID int64) ([]domain.Anekdot, error) {
+	favorites, err := s.favorites.List(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing favorites of user %d: %w", userID, err)
+	}
+
+	return favorites, nil
+}
+
+func (s *AnekdotService) AddFavorite(ctx context.Context, userID, anekdotID int64) error {
+	if anekdotID <= 0 {
+		return fmt.Errorf("%w: anekdot_id must be positive", domain.ErrInvalidInput)
+	}
+
+	if _, err := s.anekdots.ByID(ctx, anekdotID); err != nil {
+		return err
+	}
+
+	if err := s.favorites.Add(ctx, userID, anekdotID); err != nil {
+		return fmt.Errorf("saving favorite: %w", err)
+	}
+
+	return nil
+}
+
+func (s *AnekdotService) RemoveFavorite(ctx context.Context, userID, anekdotID int64) error {
+	if anekdotID <= 0 {
+		return fmt.Errorf("%w: anekdot_id must be positive", domain.ErrInvalidInput)
+	}
+
+	if err := s.favorites.Remove(ctx, userID, anekdotID); err != nil {
+		return fmt.Errorf("removing favorite: %w", err)
 	}
 
 	return nil

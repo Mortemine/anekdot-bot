@@ -5,16 +5,17 @@ import { AccountPanel } from "./components/AccountPanel";
 import { AnekdotListPanel } from "./components/AnekdotListPanel";
 import { CategorySidebar } from "./components/CategorySidebar";
 import { ExternalPanel } from "./components/ExternalPanel";
-import { LikesPanel } from "./components/LikesPanel";
+import { SavedPanel } from "./components/SavedPanel";
 import { SubmitPanel } from "./components/SubmitPanel";
 import type { Anekdot, AuthResult, Category, User } from "./types";
 
-type Tab = "anekdots" | "external" | "likes" | "submit" | "account";
+type Tab = "anekdots" | "external" | "likes" | "favorites" | "submit" | "account";
 
 const tabs: ReadonlyArray<{ id: Tab; label: string }> = [
   { id: "anekdots", label: "Анекдоты" },
   { id: "external", label: "Случайный анекдот" },
-  { id: "likes", label: "Лайки" },
+  { id: "likes", label: "Понравившиеся" },
+  { id: "favorites", label: "Избранное" },
   { id: "submit", label: "Свой анекдот" },
   { id: "account", label: "Аккаунт" },
 ];
@@ -31,6 +32,9 @@ export default function App() {
   const [likes, setLikes] = useState<Anekdot[]>([]);
   const [likesLoading, setLikesLoading] = useState(false);
   const [likesError, setLikesError] = useState<string | null>(null);
+  const [favorites, setFavorites] = useState<Anekdot[]>([]);
+  const [favoritesLoading, setFavoritesLoading] = useState(false);
+  const [favoritesError, setFavoritesError] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [busyID, setBusyID] = useState<number | null>(null);
   const latestRequest = useRef(0);
@@ -73,6 +77,20 @@ export default function App() {
       setLikesError(errorMessage(loadError));
     } finally {
       setLikesLoading(false);
+    }
+  }, []);
+
+  const loadFavorites = useCallback(async () => {
+    setFavoritesLoading(true);
+    setFavoritesError(null);
+
+    try {
+      const payload = await api.listFavorites();
+      setFavorites(payload.anekdots);
+    } catch (loadError) {
+      setFavoritesError(errorMessage(loadError));
+    } finally {
+      setFavoritesLoading(false);
     }
   }, []);
 
@@ -129,13 +147,16 @@ export default function App() {
   useEffect(() => {
     if (user === null) {
       setLikes([]);
+      setFavorites([]);
       return;
     }
 
     void loadLikes();
-  }, [user, loadLikes]);
+    void loadFavorites();
+  }, [user, loadLikes, loadFavorites]);
 
   const likedIDs = useMemo(() => new Set(likes.map((item) => item.id)), [likes]);
+  const favoriteIDs = useMemo(() => new Set(favorites.map((item) => item.id)), [favorites]);
 
   const handleSelectCategory = useCallback((categoryId: number | null) => {
     setSelectedCategory(categoryId);
@@ -154,6 +175,7 @@ export default function App() {
     setToken(null);
     setUser(null);
     setLikes([]);
+    setFavorites([]);
   }, []);
 
   const handleToggleLike = useCallback(
@@ -183,6 +205,32 @@ export default function App() {
     [likedIDs, loadAnekdots, loadLikes, selectedCategory, user],
   );
 
+  const handleToggleFavorite = useCallback(
+    async (target: Anekdot) => {
+      if (user === null) {
+        return;
+      }
+
+      setBusyID(target.id);
+      setFavoritesError(null);
+
+      try {
+        if (favoriteIDs.has(target.id)) {
+          await api.removeFavorite(target.id);
+        } else {
+          await api.addFavorite(target.id);
+        }
+
+        await loadFavorites();
+      } catch (favoriteError) {
+        setFavoritesError(errorMessage(favoriteError));
+      } finally {
+        setBusyID(null);
+      }
+    },
+    [favoriteIDs, loadFavorites, user],
+  );
+
   const selectedCategoryName = categories.find((category) => category.id === selectedCategory)?.name ?? "Все анекдоты";
 
   return (
@@ -194,7 +242,7 @@ export default function App() {
           </span>
           <div>
             <h1>Анекдот Бот</h1>
-            <p className="muted">Категории слева, анекдоты с лайками справа</p>
+            <p className="muted">Категории слева, анекдоты с лайками и избранным справа</p>
           </div>
         </div>
         <p className="muted session">{user === null ? "Гость" : `${user.display_name} · ${user.email}`}</p>
@@ -232,11 +280,15 @@ export default function App() {
               loading={anekdotsLoading}
               error={anekdotsError ?? likesError}
               likedIDs={likedIDs}
-              canLike={user !== null}
+              favoriteIDs={favoriteIDs}
+              canReact={user !== null}
               busyID={busyID}
               emptyText="В этой категории пока нет анекдотов."
               onToggleLike={(target) => {
                 void handleToggleLike(target);
+              }}
+              onToggleFavorite={(target) => {
+                void handleToggleFavorite(target);
               }}
               onReload={() => {
                 void loadAnekdots(selectedCategory);
@@ -245,17 +297,50 @@ export default function App() {
           )}
           {tab === "external" && <ExternalPanel />}
           {tab === "likes" && (
-            <LikesPanel
+            <SavedPanel
               user={user}
-              likes={likes}
+              heading="Понравившиеся"
+              description="Анекдоты, которым вы поставили лайк"
+              guestText="Войдите в аккаунт, чтобы видеть понравившиеся анекдоты."
+              emptyText="Вы пока не лайкнули ни одного анекдота."
+              anekdots={likes}
               loading={likesLoading}
               error={likesError}
+              likedIDs={likedIDs}
+              favoriteIDs={favoriteIDs}
               busyID={busyID}
               onToggleLike={(target) => {
                 void handleToggleLike(target);
               }}
+              onToggleFavorite={(target) => {
+                void handleToggleFavorite(target);
+              }}
               onReload={() => {
                 void loadLikes();
+              }}
+            />
+          )}
+          {tab === "favorites" && (
+            <SavedPanel
+              user={user}
+              heading="Избранное"
+              description="Анекдоты, которые вы сохранили отдельно от лайков"
+              guestText="Войдите в аккаунт, чтобы видеть избранные анекдоты."
+              emptyText="Вы пока ничего не добавили в избранное."
+              anekdots={favorites}
+              loading={favoritesLoading}
+              error={favoritesError}
+              likedIDs={likedIDs}
+              favoriteIDs={favoriteIDs}
+              busyID={busyID}
+              onToggleLike={(target) => {
+                void handleToggleLike(target);
+              }}
+              onToggleFavorite={(target) => {
+                void handleToggleFavorite(target);
+              }}
+              onReload={() => {
+                void loadFavorites();
               }}
             />
           )}

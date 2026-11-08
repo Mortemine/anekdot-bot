@@ -35,6 +35,12 @@ type LikeRepository interface {
 	Remove(ctx context.Context, userID, anekdotID int64) error
 }
 
+type FavoriteRepository interface {
+	List(ctx context.Context, userID int64) ([]Anekdot, error)
+	Add(ctx context.Context, userID, anekdotID int64) error
+	Remove(ctx context.Context, userID, anekdotID int64) error
+}
+
 type ExternalAnekdotSource interface {
 	Random(ctx context.Context) (string, error)
 }

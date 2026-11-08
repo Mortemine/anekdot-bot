@@ -122,6 +122,12 @@ export const api = {
   addLike: (anekdotId: number) => request<void>(`/likes/${anekdotId}`, { method: "PUT" }),
 
   removeLike: (anekdotId: number) => request<void>(`/likes/${anekdotId}`, { method: "DELETE" }),
+
+  listFavorites: () => request<{ anekdots: Anekdot[] }>("/favorites"),
+
+  addFavorite: (anekdotId: number) => request<void>(`/favorites/${anekdotId}`, { method: "PUT" }),
+
+  removeFavorite: (anekdotId: number) => request<void>(`/favorites/${anekdotId}`, { method: "DELETE" }),
 };
 
 export function errorMessage(error: unknown): string {

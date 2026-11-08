@@ -7,10 +7,12 @@ interface Props {
   loading: boolean;
   error: string | null;
   likedIDs: ReadonlySet<number>;
-  canLike: boolean;
+  favoriteIDs: ReadonlySet<number>;
+  canReact: boolean;
   busyID: number | null;
   emptyText: string;
   onToggleLike: (target: Anekdot) => void;
+  onToggleFavorite: (target: Anekdot) => void;
   onReload: () => void;
 }
 
@@ -21,10 +23,12 @@ export function AnekdotListPanel({
   loading,
   error,
   likedIDs,
-  canLike,
+  favoriteIDs,
+  canReact,
   busyID,
   emptyText,
   onToggleLike,
+  onToggleFavorite,
   onReload,
 }: Props) {
   return (
@@ -49,24 +53,45 @@ export function AnekdotListPanel({
         <ul className="anekdot-list">
           {anekdots.map((item) => {
             const liked = likedIDs.has(item.id);
+            const favorite = favoriteIDs.has(item.id);
+            const disabled = !canReact || busyID === item.id;
+            const likeTitle = canReact ? (liked ? "Убрать лайк" : "Поставить лайк") : "Войдите, чтобы ставить лайки";
+            const favoriteTitle = canReact
+              ? favorite
+                ? "Убрать из избранного"
+                : "Добавить в избранное"
+              : "Войдите, чтобы добавлять в избранное";
 
             return (
               <li key={item.id} className="anekdot-item">
                 <p className="anekdot-item-text">{item.text}</p>
                 <div className="anekdot-item-meta">
                   <span className="badge">{item.category_name}</span>
-                  <button
-                    type="button"
-                    className={liked ? "like-button like-button-active" : "like-button"}
-                    aria-pressed={liked}
-                    aria-label={liked ? "Убрать лайк" : "Поставить лайк"}
-                    title={canLike ? (liked ? "Убрать лайк" : "Поставить лайк") : "Войдите, чтобы ставить лайки"}
-                    disabled={!canLike || busyID === item.id}
-                    onClick={() => onToggleLike(item)}
-                  >
-                    <span aria-hidden="true">{liked ? "♥" : "♡"}</span>
-                    <span className="like-count">{item.like_count}</span>
-                  </button>
+                  <div className="anekdot-item-actions">
+                    <button
+                      type="button"
+                      className={liked ? "like-button like-button-active" : "like-button"}
+                      aria-pressed={liked}
+                      aria-label={liked ? "Убрать лайк" : "Поставить лайк"}
+                      title={likeTitle}
+                      disabled={disabled}
+                      onClick={() => onToggleLike(item)}
+                    >
+                      <span aria-hidden="true">{liked ? "♥" : "♡"}</span>
+                      <span className="like-count">{item.like_count}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={favorite ? "favorite-button favorite-button-active" : "favorite-button"}
+                      aria-pressed={favorite}
+                      aria-label={favorite ? "Убрать из избранного" : "Добавить в избранное"}
+                      title={favoriteTitle}
+                      disabled={disabled}
+                      onClick={() => onToggleFavorite(item)}
+                    >
+                      <span aria-hidden="true">{favorite ? "★" : "☆"}</span>
+                    </button>
+                  </div>
                 </div>
               </li>
             );
