@@ -1,7 +1,7 @@
 # Анекдот Бот
 
 Веб-приложение с анекдотами: категории, случайный анекдот из архива, случайный
-анекдот с внешнего сайта и форма обратной связи с админкой.
+анекдот с внешнего сайта, аккаунты читателей, избранное и свои анекдоты.
 
 Проект вырос из Telegram-бота на Python: старый код больше не используется и
 лежит в [`legacy/python`](legacy/python) для истории. Активный стек — Go на
@@ -12,9 +12,10 @@
 - Список категорий с количеством анекдотов в каждой.
 - Случайный анекдот из архива, опционально в пределах категории.
 - Случайный анекдот с `baneks.site` (парсинг HTML, ограничение размера ответа).
-- Обратная связь: сообщение + необязательный контакт, защита от спама
-  (лимит запросов по IP, ограничение размера тела).
-- Админка: список обращений с фильтром по статусу и пагинацией, доступ по токену.
+- Регистрация и вход по почте и паролю (`bcrypt`), сессии на непрозрачных токенах.
+- Избранное: анекдот можно сохранить в аккаунт и убрать из него.
+- Свои анекдоты: любой зарегистрированный читатель публикует анекдот в
+  выбранной категории, дубликаты и слишком короткие тексты отклоняются.
 - Проверка здоровья `/api/v1/health` с пингом базы.
 - SPA отдаётся тем же бинарником: один процесс, один порт.
 
@@ -43,7 +44,7 @@ backend/
   cmd/seed      импорт data/*.txt в PostgreSQL
   internal/
     domain/     сущности, порты, доменные ошибки
-    usecase/    бизнес-логика (AnekdotService, FeedbackService)
+    usecase/    бизнес-логика (AnekdotService, AuthService)
     adapter/
       postgres/ репозитории на pgx/v5
       external/ клиент baneks.site
@@ -85,7 +86,7 @@ make seed
 make frontend-build
 
 # 5. Запуск
-ADMIN_TOKEN=supersecret-admin-token make run
+make run
 ```
 
 Приложение: <http://localhost:8080>. Проверка: `curl localhost:8080/api/v1/health`.
@@ -112,7 +113,7 @@ make frontend-dev   # http://localhost:5173
 | `DB_MIN_CONNS` | `2` | минимум соединений в пуле |
 | `DB_MAX_CONN_LIFETIME` | `30m` | время жизни соединения |
 | `DB_MAX_CONN_IDLE_TIME` | `5m` | время простоя соединения |
-| `ADMIN_TOKEN` | пусто | токен админки; пусто — админка выключена, минимум 16 символов |
+| `SESSION_TTL` | `720h` | время жизни сессии читателя; должен быть больше нуля |
 | `CORS_ORIGINS` | `http://localhost:5173` | разрешённые источники через запятую или `*` |
 | `TRUST_PROXY_HEADERS` | `false` | доверять `X-Forwarded-For` (только за своим прокси) |
 | `WEB_DIR` | пусто | каталог с собранной SPA; пусто — только API (`make run` передаёт `web`) |
@@ -138,8 +139,15 @@ make frontend-dev   # http://localhost:5173
 | `GET` | `/api/v1/anekdots/random` | случайный анекдот из архива |
 | `GET` | `/api/v1/anekdots/random?category_id=3` | случайный анекдот в категории |
 | `GET` | `/api/v1/anekdots/external` | случайный анекдот с `baneks.site` |
-| `POST` | `/api/v1/feedback` | отправить обращение |
-| `GET` | `/api/v1/admin/feedback` | список обращений (нужен токен) |
+| `POST` | `/api/v1/anekdots` | опубликовать свой анекдот (нужен токен) |
+| `GET` | `/api/v1/anekdots/mine` | мои анекдоты (нужен токен) |
+| `GET` | `/api/v1/favorites` | избранное (нужен токен) |
+| `PUT` | `/api/v1/favorites/{id}` | добавить в избранное (нужен токен) |
+| `DELETE` | `/api/v1/favorites/{id}` | убрать из избранного (нужен токен) |
+| `POST` | `/api/v1/auth/register` | регистрация |
+| `POST` | `/api/v1/auth/login` | вход |
+| `POST` | `/api/v1/auth/logout` | выход (нужен токен) |
+| `GET` | `/api/v1/auth/me` | текущий пользователь (нужен токен) |
 
 ### Примеры
 
@@ -150,20 +158,35 @@ curl 'localhost:8080/api/v1/anekdots/random?category_id=3'
 
 curl localhost:8080/api/v1/anekdots/external
 
-curl -X POST localhost:8080/api/v1/feedback \
+# Регистрация: в ответе token, его и передаём дальше
+curl -X POST localhost:8080/api/v1/auth/register \
   -H 'Content-Type: application/json' \
-  -d '{"message":"Не работает кнопка","contact":"@username"}'
+  -d '{"email":"reader@example.com","password":"password123","display_name":"Читатель"}'
 
-curl localhost:8080/api/v1/admin/feedback \
-  -H "X-Admin-Token: $ADMIN_TOKEN"
+curl -X POST localhost:8080/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"reader@example.com","password":"password123"}'
+
+curl -X POST localhost:8080/api/v1/anekdots \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"category_id":3,"text":"Анекдот собственного сочинения"}'
+
+curl localhost:8080/api/v1/anekdots/mine -H "Authorization: Bearer $TOKEN"
+
+curl -X PUT localhost:8080/api/v1/favorites/42 -H "Authorization: Bearer $TOKEN"
+
+curl localhost:8080/api/v1/favorites -H "Authorization: Bearer $TOKEN"
 ```
 
-Параметры админского списка: `status` (`new`, `read`, `archived`),
-`limit` (1–100, по умолчанию 50), `offset` (по умолчанию 0).
-Токен передаётся в `X-Admin-Token` или `Authorization: Bearer <token>`.
+Токен передаётся в `Authorization: Bearer <token>`; выдаётся при регистрации и
+входе, живёт `SESSION_TTL`.
 
-Ограничения: тело обратной связи — до 64 КиБ, сообщение — до 4000 символов,
-контакт — до 200 символов, не более 5 обращений в минуту с одного IP.
+Ограничения: тело запроса на вход и регистрацию — до 8 КиБ, пароль — 8–72
+символа, почта — до 254 символов, отображаемое имя — до 100 символов. Тело
+нового анекдота — до 16 КиБ, текст — 10–4000 символов; дубликат текста в
+категории возвращает `409 conflict`. Регистрация и вход ограничены 10 запросами в
+минуту с одного IP.
 
 ## База данных и миграции
 
@@ -171,9 +194,16 @@ curl localhost:8080/api/v1/admin/feedback \
 
 - `categories` — категории (`id`, `name`);
 - `anekdots` — анекдоты (`id`, `category_id` → `categories`, `text`) с
-  уникальным индексом `(category_id, md5(text))`, что делает импорт идемпотентным;
-- `feedback_messages` — обращения (`message`, `contact`, `status`, `created_at`)
-  с CHECK на статус и индексами для выборки по дате и по новым сообщениям.
+  уникальным индексом `(category_id, md5(text))`, что делает импорт идемпотентным.
+
+`backend/migrations/000002_users.up.sql` добавляет аккаунты и удаляет обращения:
+
+- `users` — читатели (`email` в нижнем регистре и уникальный, `password_hash`,
+  `display_name`);
+- `sessions` — сессии (`token_hash` — SHA-256 от токена, `user_id`, `expires_at`);
+- `anekdots.author_id` → `users` — автор пользовательского анекдота (NULL для
+  импортированных);
+- `favorites` — избранное (`user_id`, `anekdot_id`, первичный ключ по паре).
 
 Миграции встроены в бинарник через `go:embed`, поэтому `migrate` не зависит от
 файловой системы:
@@ -207,9 +237,11 @@ make lint    # нужен golangci-lint
 
 ## Безопасность
 
-- Токен админки сравнивается за постоянное время (SHA-256 + `subtle`).
+- Пароли хранятся только как `bcrypt`-хеши (cost 12), токены сессий — только как
+  SHA-256-хеши в базе.
 - CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` для всех ответов.
-- Лимит запросов на `POST /api/v1/feedback` по IP.
+- Лимит запросов на `POST /api/v1/auth/register`, `POST /api/v1/auth/login` и
+  `POST /api/v1/anekdots` по IP.
 - Строгий разбор JSON и ограничение размера тела запроса.
 - Внешний HTML читается с лимитом 1 МиБ и превращается в текст.
 - SQL — только параметризованные запросы через `pgx`.
