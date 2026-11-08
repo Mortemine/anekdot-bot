@@ -55,3 +55,21 @@ type Session struct {
 	UserID    int64
 	ExpiresAt time.Time
 }
+
+type Collection struct {
+	ID              int64
+	OwnerID         int64
+	OwnerName       string
+	Name            string
+	IsPublic        bool
+	AnekdotCount    int
+	ContainsAnekdot bool
+	Favorited       bool
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+type CollectionDetail struct {
+	Collection Collection
+	Anekdots   []Anekdot
+}

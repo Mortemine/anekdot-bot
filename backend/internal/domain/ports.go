@@ -45,3 +45,18 @@ type FavoriteRepository interface {
 type ExternalAnekdotSource interface {
 	Random(ctx context.Context) (string, error)
 }
+
+type CollectionRepository interface {
+	ListByOwner(ctx context.Context, ownerID, anekdotID int64) ([]Collection, error)
+	ListPublic(ctx context.Context, viewerID, anekdotID int64) ([]Collection, error)
+	ListFavorites(ctx context.Context, userID int64) ([]Collection, error)
+	ByID(ctx context.Context, id int64, viewerID *int64) (Collection, error)
+	Create(ctx context.Context, ownerID int64, name string) (Collection, error)
+	Update(ctx context.Context, id, ownerID int64, name string, isPublic bool) (Collection, error)
+	Delete(ctx context.Context, id, ownerID int64) error
+	AddAnekdot(ctx context.Context, collectionID, anekdotID int64) error
+	RemoveAnekdot(ctx context.Context, collectionID, anekdotID int64) error
+	Anekdots(ctx context.Context, collectionID int64) ([]Anekdot, error)
+	Favorite(ctx context.Context, userID, collectionID int64) error
+	Unfavorite(ctx context.Context, userID, collectionID int64) error
+}

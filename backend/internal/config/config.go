@@ -16,8 +16,8 @@ const (
 	defaultDatabaseURL     = "postgres://anekdot:anekdot@localhost:5432/anekdot?sslmode=disable"
 	defaultExternalURL     = "https://baneks.site/random"
 	defaultCORSOrigins     = "http://localhost:5173"
-	defaultWebDir          = "web"
-	defaultDataDir         = "../data"
+	defaultWebDir          = "backend/web"
+	defaultDataDir         = "data"
 	defaultLogLevel        = "info"
 	defaultLogFormat       = "json"
 	defaultRequestTimeout  = 10 * time.Second

@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -250,6 +252,232 @@ func (s *reactionStub) Remove(_ context.Context, _, anekdotID int64) error {
 	return nil
 }
 
+type collectionStub struct {
+	byID      map[int64]domain.Collection
+	items     map[int64][]domain.Anekdot
+	favorites map[int64]map[int64]bool
+	nextID    int64
+	createErr error
+}
+
+func newCollectionStub() *collectionStub {
+	return &collectionStub{
+		byID:      map[int64]domain.Collection{},
+		items:     map[int64][]domain.Anekdot{},
+		favorites: map[int64]map[int64]bool{},
+	}
+}
+
+func (s *collectionStub) ListByOwner(_ context.Context, ownerID, anekdotID int64) ([]domain.Collection, error) {
+	result := []domain.Collection{}
+
+	for _, collection := range s.sorted() {
+		if collection.OwnerID != ownerID {
+			continue
+		}
+
+		result = append(result, s.decorate(collection, ownerID, anekdotID))
+	}
+
+	return result, nil
+}
+
+func (s *collectionStub) ListPublic(_ context.Context, viewerID, anekdotID int64) ([]domain.Collection, error) {
+	result := []domain.Collection{}
+
+	for _, collection := range s.sorted() {
+		if !collection.IsPublic {
+			continue
+		}
+
+		result = append(result, s.decorate(collection, viewerID, anekdotID))
+	}
+
+	return result, nil
+}
+
+func (s *collectionStub) ListFavorites(_ context.Context, userID int64) ([]domain.Collection, error) {
+	result := []domain.Collection{}
+
+	for _, collection := range s.sorted() {
+		if collection.IsPublic && s.favorites[userID][collection.ID] {
+			result = append(result, s.decorate(collection, userID, 0))
+		}
+	}
+
+	return result, nil
+}
+
+func (s *collectionStub) ByID(_ context.Context, id int64, viewerID *int64) (domain.Collection, error) {
+	collection, ok := s.byID[id]
+	if !ok {
+		return domain.Collection{}, fmt.Errorf("%w: collection %d", domain.ErrNotFound, id)
+	}
+
+	return s.decorate(collection, dereferenceID(viewerID), 0), nil
+}
+
+func (s *collectionStub) Create(_ context.Context, ownerID int64, name string) (domain.Collection, error) {
+	if s.createErr != nil {
+		return domain.Collection{}, s.createErr
+	}
+
+	for _, collection := range s.byID {
+		if collection.OwnerID == ownerID && strings.EqualFold(collection.Name, name) {
+			return domain.Collection{}, fmt.Errorf("%w: duplicate name", domain.ErrConflict)
+		}
+	}
+
+	s.nextID++
+
+	collection := domain.Collection{
+		ID:        s.nextID,
+		OwnerID:   ownerID,
+		Name:      name,
+		CreatedAt: time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC),
+		UpdatedAt: time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC),
+	}
+	s.byID[collection.ID] = collection
+
+	return collection, nil
+}
+
+func (s *collectionStub) Update(
+	_ context.Context,
+	id, ownerID int64,
+	name string,
+	isPublic bool,
+) (domain.Collection, error) {
+	collection, ok := s.byID[id]
+	if !ok || collection.OwnerID != ownerID {
+		return domain.Collection{}, fmt.Errorf("%w: collection %d", domain.ErrNotFound, id)
+	}
+
+	collection.Name = name
+	collection.IsPublic = isPublic
+	s.byID[id] = collection
+
+	return collection, nil
+}
+
+func (s *collectionStub) Delete(_ context.Context, id, ownerID int64) error {
+	collection, ok := s.byID[id]
+	if !ok || collection.OwnerID != ownerID {
+		return fmt.Errorf("%w: collection %d", domain.ErrNotFound, id)
+	}
+
+	delete(s.byID, id)
+	delete(s.items, id)
+
+	return nil
+}
+
+func (s *collectionStub) AddAnekdot(_ context.Context, collectionID, anekdotID int64) error {
+	if _, ok := s.byID[collectionID]; !ok {
+		return fmt.Errorf("%w: collection %d", domain.ErrNotFound, collectionID)
+	}
+
+	for _, anekdot := range s.items[collectionID] {
+		if anekdot.ID == anekdotID {
+			return nil
+		}
+	}
+
+	s.items[collectionID] = append(s.items[collectionID], domain.Anekdot{
+		ID:           anekdotID,
+		CategoryID:   1,
+		CategoryName: "Разные",
+		Text:         "анекдот в коллекции",
+	})
+
+	return nil
+}
+
+func (s *collectionStub) RemoveAnekdot(_ context.Context, collectionID, anekdotID int64) error {
+	items := s.items[collectionID]
+	for index, anekdot := range items {
+		if anekdot.ID == anekdotID {
+			s.items[collectionID] = append(items[:index], items[index+1:]...)
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf("%w: anecdote %d", domain.ErrNotFound, anekdotID)
+}
+
+func (s *collectionStub) Anekdots(_ context.Context, collectionID int64) ([]domain.Anekdot, error) {
+	items, ok := s.items[collectionID]
+	if !ok {
+		return []domain.Anekdot{}, nil
+	}
+
+	return items, nil
+}
+
+func (s *collectionStub) Favorite(_ context.Context, userID, collectionID int64) error {
+	if _, ok := s.byID[collectionID]; !ok {
+		return fmt.Errorf("%w: collection %d", domain.ErrNotFound, collectionID)
+	}
+
+	if s.favorites[userID] == nil {
+		s.favorites[userID] = map[int64]bool{}
+	}
+
+	s.favorites[userID][collectionID] = true
+
+	return nil
+}
+
+func (s *collectionStub) Unfavorite(_ context.Context, userID, collectionID int64) error {
+	if !s.favorites[userID][collectionID] {
+		return fmt.Errorf("%w: favorite of collection %d", domain.ErrNotFound, collectionID)
+	}
+
+	delete(s.favorites[userID], collectionID)
+
+	return nil
+}
+
+func (s *collectionStub) sorted() []domain.Collection {
+	ids := make([]int64, 0, len(s.byID))
+	for id := range s.byID {
+		ids = append(ids, id)
+	}
+
+	sort.Slice(ids, func(left, right int) bool {
+		return ids[left] > ids[right]
+	})
+
+	result := make([]domain.Collection, 0, len(ids))
+	for _, id := range ids {
+		result = append(result, s.byID[id])
+	}
+
+	return result
+}
+
+func (s *collectionStub) decorate(collection domain.Collection, viewerID, anekdotID int64) domain.Collection {
+	collection.AnekdotCount = len(s.items[collection.ID])
+	collection.Favorited = s.favorites[viewerID][collection.ID]
+
+	for _, anekdot := range s.items[collection.ID] {
+		if anekdot.ID == anekdotID {
+			collection.ContainsAnekdot = true
+		}
+	}
+
+	return collection
+}
+
+func dereferenceID(value *int64) int64 {
+	if value == nil {
+		return 0
+	}
+
+	return *value
+}
+
 type pingerStub struct {
 	err error
 }
@@ -259,15 +487,16 @@ func (s pingerStub) Ping(context.Context) error {
 }
 
 type fixture struct {
-	categories *categoryStub
-	anekdots   *anekdotStub
-	external   *externalStub
-	likes      *reactionStub
-	favorites  *reactionStub
-	users      *userStub
-	sessions   *sessionStub
-	pinger     pingerStub
-	cfg        *config.Config
+	categories  *categoryStub
+	anekdots    *anekdotStub
+	external    *externalStub
+	likes       *reactionStub
+	favorites   *reactionStub
+	users       *userStub
+	sessions    *sessionStub
+	collections *collectionStub
+	pinger      pingerStub
+	cfg         *config.Config
 }
 
 const (
@@ -296,12 +525,13 @@ func newFixture() *fixture {
 			listed:     []domain.Anekdot{{ID: 3, CategoryID: 1, Text: "первый", LikeCount: 2}},
 			total:      42,
 		},
-		external:  &externalStub{text: "внешний"},
-		likes:     &reactionStub{list: []domain.Anekdot{{ID: 4, CategoryID: 1, Text: "лайкнутый", LikeCount: 5}}},
-		favorites: &reactionStub{list: []domain.Anekdot{{ID: 7, CategoryID: 1, Text: "избранный", LikeCount: 3}}},
-		users:     users,
-		sessions:  &sessionStub{users: users, sessions: map[string]domain.Session{}},
-		pinger:    pingerStub{},
+		external:    &externalStub{text: "внешний"},
+		likes:       &reactionStub{list: []domain.Anekdot{{ID: 4, CategoryID: 1, Text: "лайкнутый", LikeCount: 5}}},
+		favorites:   &reactionStub{list: []domain.Anekdot{{ID: 7, CategoryID: 1, Text: "избранный", LikeCount: 3}}},
+		users:       users,
+		sessions:    &sessionStub{users: users, sessions: map[string]domain.Session{}},
+		collections: newCollectionStub(),
+		pinger:      pingerStub{},
 		cfg: &config.Config{
 			HTTPAddr:    ":8080",
 			SessionTTL:  time.Hour,
@@ -319,6 +549,7 @@ func (f *fixture) handler(t *testing.T) http.Handler {
 		logger,
 		usecase.NewAnekdotService(f.categories, f.anekdots, f.likes, f.favorites, f.external, logger),
 		usecase.NewAuthService(f.users, f.sessions, f.cfg.SessionTTL, logger),
+		usecase.NewCollectionService(f.collections, logger),
 		f.pinger,
 	)
 	if err != nil {
@@ -331,12 +562,18 @@ func (f *fixture) handler(t *testing.T) http.Handler {
 func (f *fixture) token(t *testing.T, handler http.Handler) string {
 	t.Helper()
 
+	return f.tokenFor(t, handler, testEmail)
+}
+
+func (f *fixture) tokenFor(t *testing.T, handler http.Handler, email string) string {
+	t.Helper()
+
 	recorder := perform(
 		t,
 		handler,
 		http.MethodPost,
 		"/api/v1/auth/register",
-		strings.NewReader(`{"email":"`+testEmail+`","password":"`+testPassword+`"}`),
+		strings.NewReader(`{"email":"`+email+`","password":"`+testPassword+`"}`),
 		map[string]string{"Content-Type": "application/json"},
 	)
 	if recorder.Code != http.StatusCreated {
@@ -1360,5 +1597,275 @@ func writeFile(t *testing.T, path, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("writing %s: %v", path, err)
+	}
+}
+
+func jsonHeaders(token string) map[string]string {
+	headers := map[string]string{"Content-Type": "application/json"}
+	if token != "" {
+		headers["Authorization"] = "Bearer " + token
+	}
+
+	return headers
+}
+
+func createCollection(t *testing.T, handler http.Handler, token, name string) collectionDTO {
+	t.Helper()
+
+	recorder := perform(
+		t,
+		handler,
+		http.MethodPost,
+		"/api/v1/collections",
+		strings.NewReader(`{"name":"`+name+`"}`),
+		jsonHeaders(token),
+	)
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want 201: %s", recorder.Code, recorder.Body.String())
+	}
+
+	return decodeBody[collectionDetailResponse](t, recorder).Collection
+}
+
+func TestCollectionsRequireToken(t *testing.T) {
+	f := newFixture()
+	handler := f.handler(t)
+
+	targets := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/api/v1/collections"},
+		{http.MethodPost, "/api/v1/collections"},
+		{http.MethodGet, "/api/v1/collections/favorites"},
+		{http.MethodPatch, "/api/v1/collections/1"},
+		{http.MethodDelete, "/api/v1/collections/1"},
+		{http.MethodPut, "/api/v1/collections/1/anekdots/4"},
+		{http.MethodPut, "/api/v1/collections/1/favorite"},
+	}
+
+	for _, target := range targets {
+		recorder := perform(t, handler, target.method, target.path, nil, nil)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Errorf("%s %s status = %d, want 401", target.method, target.path, recorder.Code)
+		}
+	}
+}
+
+func TestCollectionsCreateAndList(t *testing.T) {
+	f := newFixture()
+	handler := f.handler(t)
+
+	owner := f.token(t, handler)
+	created := createCollection(t, handler, owner, "Читать в дороге")
+	if created.Name != "Читать в дороге" || created.IsPublic {
+		t.Fatalf("created = %+v", created)
+	}
+
+	recorder := perform(t, handler, http.MethodGet, "/api/v1/collections", nil, bearer(owner))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+	}
+
+	payload := decodeBody[collectionsResponse](t, recorder)
+	if len(payload.Collections) != 1 || payload.Collections[0].ID != created.ID {
+		t.Errorf("collections = %+v", payload.Collections)
+	}
+
+	blank := perform(
+		t,
+		handler,
+		http.MethodPost,
+		"/api/v1/collections",
+		strings.NewReader(`{"name":"   "}`),
+		jsonHeaders(owner),
+	)
+	if blank.Code != http.StatusBadRequest {
+		t.Errorf("blank name status = %d, want 400", blank.Code)
+	}
+
+	duplicate := perform(
+		t,
+		handler,
+		http.MethodPost,
+		"/api/v1/collections",
+		strings.NewReader(`{"name":"читать в дороге"}`),
+		jsonHeaders(owner),
+	)
+	if duplicate.Code != http.StatusConflict {
+		t.Errorf("duplicate name status = %d, want 409", duplicate.Code)
+	}
+}
+
+func TestCollectionsAnekdots(t *testing.T) {
+	f := newFixture()
+	handler := f.handler(t)
+
+	owner := f.token(t, handler)
+	stranger := f.tokenFor(t, handler, "stranger@example.com")
+	created := createCollection(t, handler, owner, "Читать в дороге")
+
+	target := fmt.Sprintf("/api/v1/collections/%d/anekdots/4", created.ID)
+
+	added := perform(t, handler, http.MethodPut, target, nil, bearer(owner))
+	if added.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204: %s", added.Code, added.Body.String())
+	}
+
+	detail := perform(t, handler, http.MethodGet, fmt.Sprintf("/api/v1/collections/%d", created.ID), nil, bearer(owner))
+	payload := decodeBody[collectionDetailResponse](t, detail)
+	if len(payload.Anekdots) != 1 || payload.Anekdots[0].ID != 4 {
+		t.Errorf("anekdots = %+v", payload.Anekdots)
+	}
+
+	if payload.Collection.AnekdotCount != 1 {
+		t.Errorf("collection = %+v", payload.Collection)
+	}
+
+	filtered := perform(t, handler, http.MethodGet, "/api/v1/collections?anekdot_id=4", nil, bearer(owner))
+	mine := decodeBody[collectionsResponse](t, filtered)
+	if len(mine.Collections) != 1 || !mine.Collections[0].ContainsAnekdot {
+		t.Errorf("filtered collections = %+v", mine.Collections)
+	}
+
+	foreignAdd := perform(t, handler, http.MethodPut, target, nil, bearer(stranger))
+	if foreignAdd.Code != http.StatusForbidden {
+		t.Errorf("stranger add status = %d, want 403", foreignAdd.Code)
+	}
+
+	foreignUpdate := perform(
+		t,
+		handler,
+		http.MethodPatch,
+		fmt.Sprintf("/api/v1/collections/%d", created.ID),
+		strings.NewReader(`{"name":"Чужая","is_public":true}`),
+		jsonHeaders(stranger),
+	)
+	if foreignUpdate.Code != http.StatusForbidden {
+		t.Errorf("stranger update status = %d, want 403", foreignUpdate.Code)
+	}
+}
+
+func TestCollectionsVisibility(t *testing.T) {
+	f := newFixture()
+	handler := f.handler(t)
+
+	owner := f.token(t, handler)
+	stranger := f.tokenFor(t, handler, "stranger@example.com")
+	created := createCollection(t, handler, owner, "Читать в дороге")
+	target := fmt.Sprintf("/api/v1/collections/%d", created.ID)
+
+	hidden := perform(t, handler, http.MethodGet, target, nil, bearer(stranger))
+	if hidden.Code != http.StatusNotFound {
+		t.Errorf("private detail status = %d, want 404", hidden.Code)
+	}
+
+	empty := perform(t, handler, http.MethodGet, "/api/v1/collections/public", nil, nil)
+	if payload := decodeBody[collectionsResponse](t, empty); len(payload.Collections) != 0 {
+		t.Errorf("public collections = %+v, want none", payload.Collections)
+	}
+
+	published := perform(
+		t,
+		handler,
+		http.MethodPatch,
+		target,
+		strings.NewReader(`{"name":"Лучшее","is_public":true}`),
+		jsonHeaders(owner),
+	)
+	if published.Code != http.StatusOK {
+		t.Fatalf("publish status = %d, want 200: %s", published.Code, published.Body.String())
+	}
+
+	updated := decodeBody[collectionDetailResponse](t, published).Collection
+	if !updated.IsPublic || updated.Name != "Лучшее" {
+		t.Errorf("collection = %+v", updated)
+	}
+
+	public := perform(t, handler, http.MethodGet, "/api/v1/collections/public", nil, nil)
+	listed := decodeBody[collectionsResponse](t, public)
+	if len(listed.Collections) != 1 || listed.Collections[0].ID != created.ID {
+		t.Errorf("public collections = %+v", listed.Collections)
+	}
+}
+
+func TestCollectionsFavorites(t *testing.T) {
+	f := newFixture()
+	handler := f.handler(t)
+
+	owner := f.token(t, handler)
+	stranger := f.tokenFor(t, handler, "stranger@example.com")
+	created := createCollection(t, handler, owner, "Лучшее")
+
+	published := perform(
+		t,
+		handler,
+		http.MethodPatch,
+		fmt.Sprintf("/api/v1/collections/%d", created.ID),
+		strings.NewReader(`{"name":"Лучшее","is_public":true}`),
+		jsonHeaders(owner),
+	)
+	if published.Code != http.StatusOK {
+		t.Fatalf("publish status = %d, want 200: %s", published.Code, published.Body.String())
+	}
+
+	target := fmt.Sprintf("/api/v1/collections/%d/favorite", created.ID)
+
+	added := perform(t, handler, http.MethodPut, target, nil, bearer(stranger))
+	if added.Code != http.StatusNoContent {
+		t.Fatalf("favorite status = %d, want 204: %s", added.Code, added.Body.String())
+	}
+
+	listing := perform(t, handler, http.MethodGet, "/api/v1/collections/favorites", nil, bearer(stranger))
+	payload := decodeBody[collectionsResponse](t, listing)
+	if len(payload.Collections) != 1 || !payload.Collections[0].Favorited {
+		t.Errorf("favorites = %+v", payload.Collections)
+	}
+
+	removal := perform(t, handler, http.MethodDelete, target, nil, bearer(stranger))
+	if removal.Code != http.StatusNoContent {
+		t.Errorf("remove status = %d, want 204", removal.Code)
+	}
+}
+
+func TestCollectionsPrivateCannotBeFavorited(t *testing.T) {
+	f := newFixture()
+	handler := f.handler(t)
+
+	owner := f.token(t, handler)
+	stranger := f.tokenFor(t, handler, "stranger@example.com")
+	private := createCollection(t, handler, owner, "Черновик")
+
+	target := fmt.Sprintf("/api/v1/collections/%d/favorite", private.ID)
+
+	recorder := perform(t, handler, http.MethodPut, target, nil, bearer(stranger))
+	if recorder.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want 403: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestCollectionsDeleteAndBadID(t *testing.T) {
+	f := newFixture()
+	handler := f.handler(t)
+
+	owner := f.token(t, handler)
+	created := createCollection(t, handler, owner, "Временная")
+	target := fmt.Sprintf("/api/v1/collections/%d", created.ID)
+
+	recorder := perform(t, handler, http.MethodDelete, target, nil, bearer(owner))
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("delete status = %d, want 204: %s", recorder.Code, recorder.Body.String())
+	}
+
+	after := perform(t, handler, http.MethodGet, target, nil, bearer(owner))
+	if after.Code != http.StatusNotFound {
+		t.Errorf("status after delete = %d, want 404", after.Code)
+	}
+
+	for _, bad := range []string{"/api/v1/collections/0", "/api/v1/collections/abc"} {
+		invalid := perform(t, handler, http.MethodGet, bad, nil, bearer(owner))
+		if invalid.Code != http.StatusBadRequest {
+			t.Errorf("GET %s status = %d, want 400", bad, invalid.Code)
+		}
 	}
 }

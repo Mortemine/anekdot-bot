@@ -28,6 +28,7 @@ func NewRouter(
 	logger *slog.Logger,
 	anekdotService *usecase.AnekdotService,
 	authService *usecase.AuthService,
+	collectionService *usecase.CollectionService,
 	pinger databasePinger,
 ) (http.Handler, error) {
 	mux := http.NewServeMux()
@@ -36,9 +37,11 @@ func NewRouter(
 	likeHandler := NewLikeHandler(anekdotService, logger)
 	favoriteHandler := NewFavoriteHandler(anekdotService, logger)
 	authHandler := NewAuthHandler(authService, logger)
+	collectionHandler := NewCollectionHandler(collectionService, logger)
 	healthHandler := NewHealthHandler(pinger, logger)
 
 	requireAuth := authMiddleware(authService, logger)
+	optionalAuth := optionalAuthMiddleware(authService)
 
 	mux.HandleFunc("GET /api/v1/health", healthHandler.Health)
 	mux.HandleFunc("GET /api/v1/categories", anekdotHandler.ListCategories)
@@ -73,6 +76,45 @@ func NewRouter(
 	mux.Handle("GET /api/v1/favorites", requireAuth(http.HandlerFunc(favoriteHandler.List)))
 	mux.Handle("PUT /api/v1/favorites/{anekdot_id}", requireAuth(http.HandlerFunc(favoriteHandler.Add)))
 	mux.Handle("DELETE /api/v1/favorites/{anekdot_id}", requireAuth(http.HandlerFunc(favoriteHandler.Remove)))
+
+	mux.Handle("GET /api/v1/collections", requireAuth(http.HandlerFunc(collectionHandler.ListMine)))
+	mux.Handle("POST /api/v1/collections", requireAuth(writeLimited(http.HandlerFunc(collectionHandler.Create))))
+	mux.Handle(
+		"GET /api/v1/collections/public",
+		optionalAuth(http.HandlerFunc(collectionHandler.ListPublic)),
+	)
+	mux.Handle(
+		"GET /api/v1/collections/favorites",
+		requireAuth(http.HandlerFunc(collectionHandler.ListFavorites)),
+	)
+	mux.Handle(
+		"GET /api/v1/collections/{collection_id}",
+		optionalAuth(http.HandlerFunc(collectionHandler.Detail)),
+	)
+	mux.Handle(
+		"PATCH /api/v1/collections/{collection_id}",
+		requireAuth(http.HandlerFunc(collectionHandler.Update)),
+	)
+	mux.Handle(
+		"DELETE /api/v1/collections/{collection_id}",
+		requireAuth(http.HandlerFunc(collectionHandler.Delete)),
+	)
+	mux.Handle(
+		"PUT /api/v1/collections/{collection_id}/anekdots/{anekdot_id}",
+		requireAuth(http.HandlerFunc(collectionHandler.AddAnekdot)),
+	)
+	mux.Handle(
+		"DELETE /api/v1/collections/{collection_id}/anekdots/{anekdot_id}",
+		requireAuth(http.HandlerFunc(collectionHandler.RemoveAnekdot)),
+	)
+	mux.Handle(
+		"PUT /api/v1/collections/{collection_id}/favorite",
+		requireAuth(http.HandlerFunc(collectionHandler.AddFavorite)),
+	)
+	mux.Handle(
+		"DELETE /api/v1/collections/{collection_id}/favorite",
+		requireAuth(http.HandlerFunc(collectionHandler.RemoveFavorite)),
+	)
 
 	mux.HandleFunc("GET /api/v1/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "Эндпоинт не найден.")

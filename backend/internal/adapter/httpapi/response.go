@@ -48,6 +48,8 @@ func writeDomainError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "Неверная почта или пароль.")
 	case errors.Is(err, domain.ErrConflict):
 		writeError(w, http.StatusConflict, "conflict", "Такая запись уже есть.")
+	case errors.Is(err, domain.ErrForbidden):
+		writeError(w, http.StatusForbidden, "forbidden", "Недостаточно прав для этого действия.")
 	case errors.Is(err, domain.ErrUpstreamUnavailable):
 		writeError(w, http.StatusBadGateway, "upstream_unavailable", "Внешний источник анекдотов сейчас недоступен.")
 	default:
@@ -60,6 +62,7 @@ func isExpectedError(err error) bool {
 		errors.Is(err, domain.ErrInvalidInput) ||
 		errors.Is(err, domain.ErrUnauthorized) ||
 		errors.Is(err, domain.ErrConflict) ||
+		errors.Is(err, domain.ErrForbidden) ||
 		errors.Is(err, domain.ErrUpstreamUnavailable)
 }
 

@@ -278,6 +278,23 @@ func authMiddleware(service *usecase.AuthService, logger *slog.Logger) func(http
 	}
 }
 
+func optionalAuthMiddleware(service *usecase.AuthService) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user, err := service.Authenticate(r.Context(), bearerToken(r))
+			if err != nil {
+				next.ServeHTTP(w, r)
+
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), userContextKey{}, user)
+
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
 type ipLimiterEntry struct {
 	limiter  *rate.Limiter
 	lastSeen time.Time

@@ -89,11 +89,11 @@ func TestLoadInfrastructureDefaults(t *testing.T) {
 	if cfg.TrustProxyHeaders {
 		t.Error("TrustProxyHeaders = true, want false")
 	}
-	if cfg.WebDir != "web" {
-		t.Errorf("WebDir = %q, want web", cfg.WebDir)
+	if cfg.WebDir != "backend/web" {
+		t.Errorf("WebDir = %q, want backend/web", cfg.WebDir)
 	}
-	if cfg.DataDir != "../data" {
-		t.Errorf("DataDir = %q, want ../data", cfg.DataDir)
+	if cfg.DataDir != "data" {
+		t.Errorf("DataDir = %q, want data", cfg.DataDir)
 	}
 }
 

@@ -469,13 +469,7 @@ h2 {
   background: var(--surface);
 }
 
-.anekdot-item-text {
-  margin: 0;
-  white-space: pre-line;
-  overflow-wrap: anywhere;
-}
-
-.anekdot-item-meta {
+.anekdot-item-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -483,10 +477,28 @@ h2 {
   flex-wrap: wrap;
 }
 
+.anekdot-item-date {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.anekdot-item-text {
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
 .anekdot-item-actions {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+}
+
+.anekdot-id {
+  align-self: flex-start;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .list-controls {
@@ -613,10 +625,13 @@ h2 {
   font-size: 13px;
 }
 
-.like-button {
+.like-button,
+.favorite-button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
+  min-width: 62px;
   padding: 6px 14px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -624,25 +639,6 @@ h2 {
   color: var(--muted);
   font: inherit;
   font-size: 13px;
-  cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    color 0.15s ease,
-    background 0.15s ease;
-}
-
-.favorite-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 38px;
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface-raised);
-  color: var(--muted);
-  font: inherit;
-  font-size: 14px;
   line-height: 1;
   cursor: pointer;
   transition:
@@ -685,6 +681,156 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 
+.collection-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.collection-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.collection-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.collection-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+.collection-select {
+  min-width: 180px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+
+.collection-create {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.collection-create .input {
+  flex: 1 1 240px;
+}
+
+.collection-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.collection-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.collection-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.collection-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.collection-name {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.collection-name:hover {
+  color: var(--accent);
+}
+
+.collection-name:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.collection-meta {
+  margin: 0;
+  font-size: 13px;
+}
+
+.collection-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.collection-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.collection-visibility {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.badge-public {
+  background: rgba(74, 222, 128, 0.16);
+  color: var(--success);
+}
+
+.collection-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 8px;
+}
+
 .segmented {
   display: flex;
   gap: 8px;
@@ -724,17 +870,6 @@ h2 {
 .session {
   text-align: right;
   overflow-wrap: anywhere;
-}
-
-.app-footer {
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.app-footer p {
-  margin: 6px 0;
 }
 
 @media (max-width: 720px) {

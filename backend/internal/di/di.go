@@ -49,6 +49,9 @@ func New(cfg *config.Config, logger *slog.Logger) (*do.RootScope, error) {
 	do.Provide(injector, func(i do.Injector) (domain.FavoriteRepository, error) {
 		return postgres.NewFavoriteRepository(do.MustInvoke[*pgxpool.Pool](i)), nil
 	})
+	do.Provide(injector, func(i do.Injector) (domain.CollectionRepository, error) {
+		return postgres.NewCollectionRepository(do.MustInvoke[*pgxpool.Pool](i)), nil
+	})
 
 	do.Provide(injector, func(i do.Injector) (domain.ExternalAnekdotSource, error) {
 		settings := do.MustInvoke[*config.Config](i)
@@ -79,12 +82,20 @@ func New(cfg *config.Config, logger *slog.Logger) (*do.RootScope, error) {
 		), nil
 	})
 
+	do.Provide(injector, func(i do.Injector) (*usecase.CollectionService, error) {
+		return usecase.NewCollectionService(
+			do.MustInvoke[domain.CollectionRepository](i),
+			do.MustInvoke[*slog.Logger](i),
+		), nil
+	})
+
 	do.Provide(injector, func(i do.Injector) (http.Handler, error) {
 		return httpapi.NewRouter(
 			do.MustInvoke[*config.Config](i),
 			do.MustInvoke[*slog.Logger](i),
 			do.MustInvoke[*usecase.AnekdotService](i),
 			do.MustInvoke[*usecase.AuthService](i),
+			do.MustInvoke[*usecase.CollectionService](i),
 			do.MustInvoke[*pgxpool.Pool](i),
 		)
 	})

@@ -1,4 +1,4 @@
-backend/bin/
+bin/
 backend/web/
 frontend/dist/
 
@@ -14,3 +14,4 @@ frontend/npm-debug.log*
 .DS_Store
 .idea/
 .vscode/
+docker-compose.yml

@@ -1,5 +1,5 @@
 import { AnekdotListPanel } from "./AnekdotListPanel";
-import type { Anekdot, User } from "../types";
+import type { Anekdot, Collection, User } from "../types";
 
 interface Props {
   user: User | null;
@@ -13,8 +13,11 @@ interface Props {
   likedIDs: ReadonlySet<number>;
   favoriteIDs: ReadonlySet<number>;
   busyID: number | null;
+  notice?: string | null;
+  collections?: Collection[];
   onToggleLike: (target: Anekdot) => void;
   onToggleFavorite: (target: Anekdot) => void;
+  onAddToCollection?: (target: Anekdot, collectionId: number) => void;
   onReload: () => void;
 }
 
@@ -30,8 +33,11 @@ export function SavedPanel({
   likedIDs,
   favoriteIDs,
   busyID,
+  notice = null,
+  collections = [],
   onToggleLike,
   onToggleFavorite,
+  onAddToCollection,
   onReload,
 }: Props) {
   if (user === null) {
@@ -55,8 +61,11 @@ export function SavedPanel({
       canReact
       busyID={busyID}
       emptyText={emptyText}
+      notice={notice}
+      collections={collections}
       onToggleLike={onToggleLike}
       onToggleFavorite={onToggleFavorite}
+      onAddToCollection={onAddToCollection}
       onReload={onReload}
     />
   );

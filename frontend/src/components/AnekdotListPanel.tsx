@@ -1,4 +1,7 @@
-import type { Anekdot, AnekdotSort } from "../types";
+import { useState } from "react";
+
+import type { Anekdot, AnekdotSort, Collection } from "../types";
+import { formatDate } from "../format";
 
 export interface AnekdotPaging {
   page: number;
@@ -22,8 +25,11 @@ interface Props {
   canReact: boolean;
   busyID: number | null;
   emptyText: string;
+  notice?: string | null;
+  collections?: Collection[];
   onToggleLike: (target: Anekdot) => void;
   onToggleFavorite: (target: Anekdot) => void;
+  onAddToCollection?: (target: Anekdot, collectionId: number) => void;
   onReload: () => void;
   paging?: AnekdotPaging;
 }
@@ -52,11 +58,15 @@ export function AnekdotListPanel({
   canReact,
   busyID,
   emptyText,
+  notice = null,
+  collections = [],
   onToggleLike,
   onToggleFavorite,
+  onAddToCollection,
   onReload,
   paging,
 }: Props) {
+  const [pickerID, setPickerID] = useState<number | null>(null);
   const totalPages = paging === undefined ? 1 : Math.max(1, Math.ceil(paging.total / paging.pageSize));
   const pages = paging === undefined ? [] : pageNumbers(paging.page, totalPages);
 
@@ -96,6 +106,8 @@ export function AnekdotListPanel({
 
       {error !== null && <p className="alert">{error}</p>}
 
+      {notice !== null && <p className="alert alert-success">{notice}</p>}
+
       {loading && anekdots.length === 0 && <p className="empty-state">Загружаем анекдоты…</p>}
 
       {!loading && error === null && anekdots.length === 0 && <p className="empty-state">{emptyText}</p>}
@@ -115,36 +127,78 @@ export function AnekdotListPanel({
 
             return (
               <li key={item.id} className="anekdot-item">
-                <p className="anekdot-item-text">{item.text}</p>
-                <div className="anekdot-item-meta">
+                <div className="anekdot-item-head">
                   <span className="badge">{item.category_name}</span>
-                  <div className="anekdot-item-actions">
-                    <button
-                      type="button"
-                      className={liked ? "like-button like-button-active" : "like-button"}
-                      aria-pressed={liked}
-                      aria-label={liked ? "Убрать лайк" : "Поставить лайк"}
-                      title={likeTitle}
-                      disabled={disabled}
-                      onClick={() => onToggleLike(item)}
-                    >
-                      <span aria-hidden="true">{liked ? "♥" : "♡"}</span>
-                      <span className="like-count">{item.like_count}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={favorite ? "favorite-button favorite-button-active" : "favorite-button"}
-                      aria-pressed={favorite}
-                      aria-label={favorite ? "Убрать из избранного" : "Добавить в избранное"}
-                      title={favoriteTitle}
-                      disabled={disabled}
-                      onClick={() => onToggleFavorite(item)}
-                    >
-                      <span aria-hidden="true">{favorite ? "★" : "☆"}</span>
-                      <span className="like-count">{item.favorite_count}</span>
-                    </button>
-                  </div>
+                  <span className="anekdot-item-date muted">{formatDate(item.created_at)}</span>
                 </div>
+                <p className="anekdot-item-text">{item.text}</p>
+                <div className="anekdot-item-actions">
+                  <button
+                    type="button"
+                    className={favorite ? "favorite-button favorite-button-active" : "favorite-button"}
+                    aria-pressed={favorite}
+                    aria-label={favorite ? "Убрать из избранного" : "Добавить в избранное"}
+                    title={favoriteTitle}
+                    disabled={disabled}
+                    onClick={() => onToggleFavorite(item)}
+                  >
+                    <span aria-hidden="true">{favorite ? "★" : "☆"}</span>
+                    <span className="like-count">{item.favorite_count}</span>
+                  </button>
+                  {canReact && onAddToCollection !== undefined && (
+                    <button
+                      type="button"
+                      className="collection-button"
+                      title={
+                        collections.length === 0
+                          ? "Сначала создайте коллекцию в разделе «Коллекции»"
+                          : "Добавить в коллекцию"
+                      }
+                      aria-expanded={pickerID === item.id}
+                      disabled={disabled || collections.length === 0}
+                      onClick={() => setPickerID(pickerID === item.id ? null : item.id)}
+                    >
+                      <span aria-hidden="true">🗂</span>
+                      <span>В коллекцию</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={liked ? "like-button like-button-active" : "like-button"}
+                    aria-pressed={liked}
+                    aria-label={liked ? "Убрать лайк" : "Поставить лайк"}
+                    title={likeTitle}
+                    disabled={disabled}
+                    onClick={() => onToggleLike(item)}
+                  >
+                    <span aria-hidden="true">{liked ? "♥" : "♡"}</span>
+                    <span className="like-count">{item.like_count}</span>
+                  </button>
+                </div>
+                {pickerID === item.id && onAddToCollection !== undefined && (
+                  <label className="collection-picker">
+                    <span className="muted">Выберите коллекцию</span>
+                    <select
+                      className="sort-select collection-select"
+                      defaultValue=""
+                      aria-label="Коллекция"
+                      onChange={(event) => {
+                        const collectionId = Number(event.target.value);
+                        setPickerID(null);
+                        if (collectionId > 0) {
+                          onAddToCollection(item, collectionId);
+                        }
+                      }}
+                    >
+                      <option value="">— выберите —</option>
+                      {collections.map((collection) => (
+                        <option key={collection.id} value={collection.id}>
+                          {collection.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
               </li>
             );
           })}

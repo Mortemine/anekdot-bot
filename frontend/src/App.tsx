@@ -4,18 +4,20 @@ import { api, errorMessage, getToken, setToken } from "./api";
 import { AccountPanel } from "./components/AccountPanel";
 import { AnekdotListPanel } from "./components/AnekdotListPanel";
 import { CategorySidebar } from "./components/CategorySidebar";
+import { CollectionsPanel } from "./components/CollectionsPanel";
 import { ExternalPanel } from "./components/ExternalPanel";
 import { SavedPanel } from "./components/SavedPanel";
 import { SubmitPanel } from "./components/SubmitPanel";
-import type { Anekdot, AnekdotSort, AuthResult, Category, User } from "./types";
+import type { Anekdot, AnekdotSort, AuthResult, Category, Collection, User } from "./types";
 
-type Tab = "anekdots" | "external" | "likes" | "favorites" | "submit" | "account";
+type Tab = "anekdots" | "external" | "likes" | "favorites" | "collections" | "submit" | "account";
 
 const tabs: ReadonlyArray<{ id: Tab; label: string }> = [
   { id: "anekdots", label: "Анекдоты" },
   { id: "external", label: "Случайный анекдот" },
   { id: "likes", label: "Понравившиеся" },
   { id: "favorites", label: "Избранное" },
+  { id: "collections", label: "Коллекции" },
   { id: "submit", label: "Свой анекдот" },
   { id: "account", label: "Аккаунт" },
 ];
@@ -41,11 +43,16 @@ export default function App() {
   const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [favoritesError, setFavoritesError] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [collectionsLoading, setCollectionsLoading] = useState(false);
+  const [collectionsError, setCollectionsError] = useState<string | null>(null);
   const [busyID, setBusyID] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const latestAnekdots = useRef(0);
   const latestLikes = useRef(0);
   const latestFavorites = useRef(0);
+  const latestCollections = useRef(0);
 
   const loadAnekdots = useCallback(
     async (categoryId: number | null, pageNumber: number, size: number, order: AnekdotSort) => {
@@ -146,6 +153,33 @@ export default function App() {
     }
   }, []);
 
+  const loadCollections = useCallback(async () => {
+    latestCollections.current += 1;
+    const requestId = latestCollections.current;
+
+    setCollectionsLoading(true);
+    setCollectionsError(null);
+
+    try {
+      const payload = await api.listCollections();
+      if (requestId !== latestCollections.current) {
+        return;
+      }
+
+      setCollections(payload.collections);
+    } catch (loadError) {
+      if (requestId !== latestCollections.current) {
+        return;
+      }
+
+      setCollectionsError(errorMessage(loadError));
+    } finally {
+      if (requestId === latestCollections.current) {
+        setCollectionsLoading(false);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -200,15 +234,18 @@ export default function App() {
     if (user === null) {
       setLikes([]);
       setFavorites([]);
+      setCollections([]);
       return;
     }
 
     void loadLikes();
     void loadFavorites();
-  }, [user, loadLikes, loadFavorites]);
+    void loadCollections();
+  }, [user, loadLikes, loadFavorites, loadCollections]);
 
   useEffect(() => {
     setActionError(null);
+    setActionNotice(null);
   }, [tab]);
 
   const likedIDs = useMemo(() => new Set(likes.map((item) => item.id)), [likes]);
@@ -247,8 +284,35 @@ export default function App() {
     setUser(null);
     setLikes([]);
     setFavorites([]);
+    setCollections([]);
     setActionError(null);
+    setActionNotice(null);
   }, []);
+
+  const handleAddToCollection = useCallback(
+    async (target: Anekdot, collectionId: number) => {
+      if (user === null) {
+        return;
+      }
+
+      setBusyID(target.id);
+      setActionError(null);
+      setActionNotice(null);
+
+      const collection = collections.find((item) => item.id === collectionId);
+
+      try {
+        await api.addToCollection(collectionId, target.id);
+        setActionNotice(`Анекдот добавлен в коллекцию «${collection?.name ?? "коллекция"}».`);
+        await loadCollections();
+      } catch (addError) {
+        setActionError(errorMessage(addError));
+      } finally {
+        setBusyID(null);
+      }
+    },
+    [collections, loadCollections, user],
+  );
 
   const handleToggleLike = useCallback(
     async (target: Anekdot) => {
@@ -313,7 +377,6 @@ export default function App() {
           </span>
           <div>
             <h1>anekdotus</h1>
-            <p className="muted">Категории слева, анекдоты с лайками и избранным справа</p>
           </div>
         </div>
         <p className="muted session">{user === null ? "Гость" : `${user.display_name} · ${user.email}`}</p>
@@ -355,11 +418,16 @@ export default function App() {
               canReact={user !== null}
               busyID={busyID}
               emptyText="В этой категории пока нет анекдотов."
+              notice={actionNotice}
+              collections={collections}
               onToggleLike={(target) => {
                 void handleToggleLike(target);
               }}
               onToggleFavorite={(target) => {
                 void handleToggleFavorite(target);
+              }}
+              onAddToCollection={(target, collectionId) => {
+                void handleAddToCollection(target, collectionId);
               }}
               onReload={() => {
                 void reloadAnecdots();
@@ -390,11 +458,16 @@ export default function App() {
               likedIDs={likedIDs}
               favoriteIDs={favoriteIDs}
               busyID={busyID}
+              notice={actionNotice}
+              collections={collections}
               onToggleLike={(target) => {
                 void handleToggleLike(target);
               }}
               onToggleFavorite={(target) => {
                 void handleToggleFavorite(target);
+              }}
+              onAddToCollection={(target, collectionId) => {
+                void handleAddToCollection(target, collectionId);
               }}
               onReload={() => {
                 void loadLikes();
@@ -414,14 +487,30 @@ export default function App() {
               likedIDs={likedIDs}
               favoriteIDs={favoriteIDs}
               busyID={busyID}
+              notice={actionNotice}
+              collections={collections}
               onToggleLike={(target) => {
                 void handleToggleLike(target);
               }}
               onToggleFavorite={(target) => {
                 void handleToggleFavorite(target);
               }}
+              onAddToCollection={(target, collectionId) => {
+                void handleAddToCollection(target, collectionId);
+              }}
               onReload={() => {
                 void loadFavorites();
+              }}
+            />
+          )}
+          {tab === "collections" && (
+            <CollectionsPanel
+              user={user}
+              collections={collections}
+              loading={collectionsLoading}
+              error={collectionsError}
+              onReload={() => {
+                void loadCollections();
               }}
             />
           )}
@@ -437,11 +526,6 @@ export default function App() {
           )}
         </main>
       </div>
-
-      <footer className="app-footer">
-        <p>Контент не проходит предварительную модерацию: анекдоты могут содержать ненормативную лексику.</p>
-        <p className="muted">Архив Telegram-бота и случайные анекдоты с baneks.site.</p>
-      </footer>
     </div>
   );
 }

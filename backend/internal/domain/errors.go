@@ -8,4 +8,5 @@ var (
 	ErrUpstreamUnavailable = errors.New("upstream unavailable")
 	ErrConflict            = errors.New("conflict")
 	ErrUnauthorized        = errors.New("unauthorized")
+	ErrForbidden           = errors.New("forbidden")
 )

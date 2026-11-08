@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
 import { api, errorMessage } from "../api";
+import { formatDate } from "../format";
 import type { Anekdot, Category, User } from "../types";
 
 interface SubmitPanelProps {
@@ -134,11 +135,12 @@ export function SubmitPanel({ categories, user }: SubmitPanelProps) {
         <ul className="anekdot-list">
           {mine.map((anekdot) => (
             <li key={anekdot.id} className="anekdot-item">
-              <p className="anekdot-item-text">{anekdot.text}</p>
-              <footer className="anekdot-meta">
+              <div className="anekdot-item-head">
                 <span className="badge">{anekdot.category_name}</span>
-                <span className="muted">#{anekdot.id}</span>
-              </footer>
+                <span className="anekdot-item-date muted">{formatDate(anekdot.created_at)}</span>
+              </div>
+              <p className="anekdot-item-text">{anekdot.text}</p>
+              <span className="anekdot-id muted">#{anekdot.id}</span>
             </li>
           ))}
         </ul>

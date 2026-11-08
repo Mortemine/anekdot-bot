@@ -1,4 +1,14 @@
-import type { Anekdot, AnekdotPage, AnekdotSort, AuthResult, Category, ExternalAnekdot, User } from "./types";
+import type {
+  Anekdot,
+  AnekdotPage,
+  AnekdotSort,
+  AuthResult,
+  Category,
+  Collection,
+  CollectionDetail,
+  ExternalAnekdot,
+  User,
+} from "./types";
 
 const apiBase = import.meta.env.VITE_API_BASE ?? "/api/v1";
 const tokenKey = "anekdot.token";
@@ -138,6 +148,41 @@ export const api = {
   addFavorite: (anekdotId: number) => request<void>(`/favorites/${anekdotId}`, { method: "PUT" }),
 
   removeFavorite: (anekdotId: number) => request<void>(`/favorites/${anekdotId}`, { method: "DELETE" }),
+
+  listCollections: () => request<{ collections: Collection[] }>("/collections"),
+
+  listPublicCollections: () => request<{ collections: Collection[] }>("/collections/public"),
+
+  listCollectionFavorites: () => request<{ collections: Collection[] }>("/collections/favorites"),
+
+  getCollection: (collectionId: number) => request<CollectionDetail>(`/collections/${collectionId}`),
+
+  createCollection: (name: string) =>
+    request<CollectionDetail>("/collections", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+
+  updateCollection: (collectionId: number, name: string, isPublic: boolean) =>
+    request<CollectionDetail>(`/collections/${collectionId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name, is_public: isPublic }),
+    }),
+
+  deleteCollection: (collectionId: number) =>
+    request<void>(`/collections/${collectionId}`, { method: "DELETE" }),
+
+  addToCollection: (collectionId: number, anekdotId: number) =>
+    request<void>(`/collections/${collectionId}/anekdots/${anekdotId}`, { method: "PUT" }),
+
+  removeFromCollection: (collectionId: number, anekdotId: number) =>
+    request<void>(`/collections/${collectionId}/anekdots/${anekdotId}`, { method: "DELETE" }),
+
+  favoriteCollection: (collectionId: number) =>
+    request<void>(`/collections/${collectionId}/favorite`, { method: "PUT" }),
+
+  unfavoriteCollection: (collectionId: number) =>
+    request<void>(`/collections/${collectionId}/favorite`, { method: "DELETE" }),
 };
 
 export function errorMessage(error: unknown): string {

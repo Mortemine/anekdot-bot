@@ -2,8 +2,8 @@ SHELL := /bin/bash
 
 GO            ?= go
 DATABASE_URL  ?= postgres://anekdot:anekdot@localhost:5432/anekdot?sslmode=disable
-DATA_DIR      ?= ../data
-WEB_DIR       ?= web
+DATA_DIR      ?= data
+WEB_DIR       ?= backend/web
 BIN_DIR       := bin
 DB_USER       ?= anekdot
 DB_PASSWORD   ?= anekdot
@@ -35,7 +35,7 @@ help:
 	@echo "migrate-status   show the current migration version"
 	@echo "seed             import legacy data (idempotent)"
 	@echo "frontend-install install npm dependencies"
-	@echo "frontend-build   build the SPA into ./web"
+	@echo "frontend-build   build the SPA into ./backend/web"
 	@echo "frontend-dev     start the Vite dev server"
 
 db-start:
@@ -76,12 +76,12 @@ smoke:
 
 build:
 	mkdir -p $(BIN_DIR)
-	$(GO) build -trimpath -ldflags="-s -w" -o $(BIN_DIR)/api ./cmd/api
-	$(GO) build -trimpath -ldflags="-s -w" -o $(BIN_DIR)/migrate ./cmd/migrate
-	$(GO) build -trimpath -ldflags="-s -w" -o $(BIN_DIR)/seed ./cmd/seed
+	$(GO) build -trimpath -ldflags="-s -w" -o $(BIN_DIR)/api ./backend/cmd/api
+	$(GO) build -trimpath -ldflags="-s -w" -o $(BIN_DIR)/migrate ./backend/cmd/migrate
+	$(GO) build -trimpath -ldflags="-s -w" -o $(BIN_DIR)/seed ./backend/cmd/seed
 
 run:
-	env DATABASE_URL="$(DATABASE_URL)" DATA_DIR="$(DATA_DIR)" WEB_DIR="$(WEB_DIR)" $(GO) run ./cmd/api
+	env DATABASE_URL="$(DATABASE_URL)" DATA_DIR="$(DATA_DIR)" WEB_DIR="$(WEB_DIR)" $(GO) run ./backend/cmd/api
 
 test:
 	$(GO) test ./...
@@ -99,25 +99,25 @@ tidy:
 	$(GO) mod tidy
 
 migrate-up:
-	env DATABASE_URL="$(DATABASE_URL)" $(GO) run ./cmd/migrate -direction up
+	env DATABASE_URL="$(DATABASE_URL)" $(GO) run ./backend/cmd/migrate -direction up
 
 migrate-down:
-	env DATABASE_URL="$(DATABASE_URL)" $(GO) run ./cmd/migrate -direction down
+	env DATABASE_URL="$(DATABASE_URL)" $(GO) run ./backend/cmd/migrate -direction down
 
 migrate-status:
-	env DATABASE_URL="$(DATABASE_URL)" $(GO) run ./cmd/migrate -direction version
+	env DATABASE_URL="$(DATABASE_URL)" $(GO) run ./backend/cmd/migrate -direction version
 
 seed:
-	env DATABASE_URL="$(DATABASE_URL)" DATA_DIR="$(DATA_DIR)" $(GO) run ./cmd/seed
+	env DATABASE_URL="$(DATABASE_URL)" DATA_DIR="$(DATA_DIR)" $(GO) run ./backend/cmd/seed
 
 frontend-install:
-	cd ../frontend && npm install
+	cd frontend && npm install
 
 frontend-build:
-	cd ../frontend && npm run build
+	cd frontend && npm run build
 
 frontend-dev:
-	cd ../frontend && npm run dev
+	cd frontend && npm run dev
 
 clean:
-	rm -rf $(BIN_DIR) web
+	rm -rf $(BIN_DIR) $(WEB_DIR)

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/alexey/anekdotus/backend/internal/domain"
 	"github.com/alexey/anekdotus/backend/internal/usecase"
@@ -22,13 +23,14 @@ type categoryDTO struct {
 }
 
 type anekdotDTO struct {
-	ID            int64  `json:"id"`
-	CategoryID    int    `json:"category_id"`
-	CategoryName  string `json:"category_name"`
-	Text          string `json:"text"`
-	LikeCount     int    `json:"like_count"`
-	FavoriteCount int    `json:"favorite_count"`
-	AuthorID      *int64 `json:"author_id,omitempty"`
+	ID            int64     `json:"id"`
+	CategoryID    int       `json:"category_id"`
+	CategoryName  string    `json:"category_name"`
+	Text          string    `json:"text"`
+	LikeCount     int       `json:"like_count"`
+	FavoriteCount int       `json:"favorite_count"`
+	AuthorID      *int64    `json:"author_id,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type externalAnekdotDTO struct {
@@ -285,5 +287,6 @@ func toAnekdotDTO(anekdot domain.Anekdot) anekdotDTO {
 		LikeCount:     anekdot.LikeCount,
 		FavoriteCount: anekdot.FavoriteCount,
 		AuthorID:      anekdot.AuthorID,
+		CreatedAt:     anekdot.CreatedAt,
 	}
 }

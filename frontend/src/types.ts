@@ -12,6 +12,7 @@ export interface Anekdot {
   like_count: number;
   favorite_count: number;
   author_id?: number;
+  created_at: string;
 }
 
 export type AnekdotSort = "created" | "likes" | "favorites";
@@ -39,4 +40,21 @@ export interface AuthResult {
   user: User;
   token: string;
   expires_at: string;
+}
+
+export interface Collection {
+  id: number;
+  name: string;
+  owner_id: number;
+  owner_name: string;
+  is_public: boolean;
+  anekdot_count: number;
+  contains_anekdot: boolean;
+  favorited: boolean;
+  created_at: string;
+}
+
+export interface CollectionDetail {
+  collection: Collection;
+  anekdots: Anekdot[];
 }
