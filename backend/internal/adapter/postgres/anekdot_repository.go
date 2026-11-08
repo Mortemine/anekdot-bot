@@ -15,13 +15,29 @@ import (
 
 const uniqueViolationCode = "23505"
 
-const anekdotLikeCount = `
-		(SELECT count(*) FROM likes l WHERE l.anekdot_id = a.id)::int AS like_count`
+const anekdotCounters = `
+		(SELECT count(*) FROM likes l WHERE l.anekdot_id = a.id)::int AS like_count,
+		(SELECT count(*) FROM favorites f WHERE f.anekdot_id = a.id)::int AS favorite_count`
 
 const selectAnekdot = `
-	SELECT a.id, a.category_id, c.name, a.text, a.author_id, a.created_at,` + anekdotLikeCount + `
+	SELECT a.id, a.category_id, c.name, a.text, a.author_id, a.created_at,` + anekdotCounters + `
 	FROM anekdots a
 	JOIN categories c ON c.id = a.category_id`
+
+const anecdotePageSuffix = `
+	LIMIT $2 OFFSET $3`
+
+const anecdoteCategoryFilter = `
+	WHERE ($1::int IS NULL OR a.category_id = $1)`
+
+const orderByCreated = `
+	ORDER BY a.created_at DESC, a.id DESC`
+
+const orderByLikes = `
+	ORDER BY like_count DESC, a.created_at DESC, a.id DESC`
+
+const orderByFavorites = `
+	ORDER BY favorite_count DESC, a.created_at DESC, a.id DESC`
 
 type AnekdotRepository struct {
 	pool *pgxpool.Pool
@@ -109,7 +125,8 @@ func (r *AnekdotRepository) Create(ctx context.Context, anekdot domain.Anekdot) 
 		     VALUES ($1, $2, $3)
 		     RETURNING id, category_id, text, author_id, created_at
 		 )
-		 SELECT i.id, i.category_id, c.name, i.text, i.author_id, i.created_at, 0 AS like_count
+		 SELECT i.id, i.category_id, c.name, i.text, i.author_id, i.created_at, 0 AS like_count,
+		     0 AS favorite_count
 		 FROM inserted i
 		 JOIN categories c ON c.id = i.category_id`,
 		anekdot.CategoryID,
@@ -146,13 +163,15 @@ func (r *AnekdotRepository) scanOne(ctx context.Context, query string, args ...a
 	return scanAnekdot(r.pool.QueryRow(ctx, query, args...))
 }
 
-func (r *AnekdotRepository) List(ctx context.Context, categoryID *int, limit, offset int) ([]domain.Anekdot, error) {
+func (r *AnekdotRepository) List(
+	ctx context.Context,
+	categoryID *int,
+	limit, offset int,
+	sort domain.AnekdotSort,
+) ([]domain.Anekdot, error) {
 	rows, err := r.pool.Query(
 		ctx,
-		selectAnekdot+`
-		WHERE ($1::int IS NULL OR a.category_id = $1)
-		ORDER BY a.created_at DESC, a.id DESC
-		LIMIT $2 OFFSET $3`,
+		selectAnekdot+anecdoteCategoryFilter+orderClause(sort)+anecdotePageSuffix,
 		nullableInt(categoryID),
 		limit,
 		offset,
@@ -163,6 +182,31 @@ func (r *AnekdotRepository) List(ctx context.Context, categoryID *int, limit, of
 	defer rows.Close()
 
 	return collectAnekdots(rows)
+}
+
+func (r *AnekdotRepository) Count(ctx context.Context, categoryID *int) (int, error) {
+	var total int
+	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM anekdots a WHERE ($1::int IS NULL OR a.category_id = $1)`,
+		nullableInt(categoryID),
+	).Scan(&total)
+	if err != nil {
+		return 0, fmt.Errorf("counting anecdotes: %w", err)
+	}
+
+	return total, nil
+}
+
+func orderClause(sort domain.AnekdotSort) string {
+	switch sort {
+	case domain.AnekdotSortLikes:
+		return orderByLikes
+	case domain.AnekdotSortFavorites:
+		return orderByFavorites
+	case domain.AnekdotSortCreated:
+		return orderByCreated
+	default:
+		return orderByCreated
+	}
 }
 
 func scanAnekdot(row pgx.Row) (domain.Anekdot, error) {
@@ -179,6 +223,7 @@ func scanAnekdot(row pgx.Row) (domain.Anekdot, error) {
 		&authorID,
 		&anekdot.CreatedAt,
 		&anekdot.LikeCount,
+		&anekdot.FavoriteCount,
 	)
 	if err != nil {
 		return domain.Anekdot{}, err

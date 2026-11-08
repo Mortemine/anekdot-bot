@@ -16,15 +16,19 @@ const (
 	defaultDatabaseURL     = "postgres://anekdot:anekdot@localhost:5432/anekdot?sslmode=disable"
 	defaultExternalURL     = "https://baneks.site/random"
 	defaultCORSOrigins     = "http://localhost:5173"
-	defaultDataDir         = "data"
+	defaultWebDir          = "web"
+	defaultDataDir         = "../data"
+	defaultLogLevel        = "info"
+	defaultLogFormat       = "json"
 	defaultRequestTimeout  = 10 * time.Second
 	defaultShutdownTimeout = 15 * time.Second
-	defaultSessionTTL      = 30 * 24 * time.Hour
+	defaultSessionTTL      = 720 * time.Hour
 
-	defaultDBMaxConns    int32 = 10
-	defaultDBMinConns    int32 = 2
-	defaultDBMaxConnLife       = 30 * time.Minute
-	defaultDBMaxConnIdle       = 5 * time.Minute
+	defaultDBMaxConns        int32 = 10
+	defaultDBMinConns        int32 = 2
+	defaultDBMaxConnLife           = 30 * time.Minute
+	defaultDBMaxConnIdle           = 5 * time.Minute
+	defaultTrustProxyHeaders       = false
 )
 
 type Config struct {
@@ -50,11 +54,11 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		HTTPAddr:           env("HTTP_ADDR", defaultHTTPAddr),
 		DatabaseURL:        env("DATABASE_URL", defaultDatabaseURL),
-		WebDir:             strings.TrimSpace(os.Getenv("WEB_DIR")),
+		WebDir:             env("WEB_DIR", defaultWebDir),
 		DataDir:            env("DATA_DIR", defaultDataDir),
-		LogFormat:          strings.ToLower(env("LOG_FORMAT", "json")),
+		LogFormat:          strings.ToLower(env("LOG_FORMAT", defaultLogFormat)),
 		ExternalAnekdotURL: env("EXTERNAL_ANEKDOT_URL", defaultExternalURL),
-		TrustProxyHeaders:  envBool("TRUST_PROXY_HEADERS", false),
+		TrustProxyHeaders:  envBool("TRUST_PROXY_HEADERS", defaultTrustProxyHeaders),
 	}
 
 	var err error
@@ -70,7 +74,7 @@ func Load() (*Config, error) {
 	if cfg.DBMaxConnIdleTime, err = envDuration("DB_MAX_CONN_IDLE_TIME", defaultDBMaxConnIdle); err != nil {
 		return nil, err
 	}
-	if cfg.LogLevel, err = parseLogLevel(env("LOG_LEVEL", "info")); err != nil {
+	if cfg.LogLevel, err = parseLogLevel(env("LOG_LEVEL", defaultLogLevel)); err != nil {
 		return nil, err
 	}
 	if cfg.CORSOrigins, err = parseOrigins(env("CORS_ORIGINS", defaultCORSOrigins)); err != nil {

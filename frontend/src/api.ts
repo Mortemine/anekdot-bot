@@ -1,7 +1,13 @@
-import type { Anekdot, AuthResult, Category, ExternalAnekdot, User } from "./types";
+import type { Anekdot, AnekdotPage, AnekdotSort, AuthResult, Category, ExternalAnekdot, User } from "./types";
 
 const apiBase = import.meta.env.VITE_API_BASE ?? "/api/v1";
 const tokenKey = "anekdot.token";
+
+export interface AnekdotListOptions {
+  limit: number;
+  offset: number;
+  sort: AnekdotSort;
+}
 
 interface ErrorBody {
   error?: {
@@ -108,13 +114,17 @@ export const api = {
 
   myAnekdots: () => request<{ anekdots: Anekdot[] }>("/anekdots/mine"),
 
-  listAnekdots: (categoryId: number | null, limit = 40, offset = 0) => {
-    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  listAnekdots: (categoryId: number | null, options: AnekdotListOptions) => {
+    const params = new URLSearchParams({
+      limit: String(options.limit),
+      offset: String(options.offset),
+      sort: options.sort,
+    });
     if (categoryId !== null) {
       params.set("category_id", String(categoryId));
     }
 
-    return request<{ anekdots: Anekdot[] }>(`/anekdots?${params.toString()}`);
+    return request<AnekdotPage>(`/anekdots?${params.toString()}`);
   },
 
   listLikes: () => request<{ anekdots: Anekdot[] }>("/likes"),

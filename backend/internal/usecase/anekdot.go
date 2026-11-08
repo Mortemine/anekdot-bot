@@ -72,30 +72,58 @@ func (s *AnekdotService) Anekdots(
 	ctx context.Context,
 	categoryID *int,
 	limit, offset int,
-) ([]domain.Anekdot, error) {
-	if offset < 0 {
-		return nil, fmt.Errorf("%w: offset must not be negative", domain.ErrInvalidInput)
+	sort domain.AnekdotSort,
+) (domain.AnekdotPage, error) {
+	normalizedSort, err := normalizeAnekdotSort(sort)
+	if err != nil {
+		return domain.AnekdotPage{}, err
 	}
 
-	switch {
-	case limit <= 0:
-		limit = categoryPageSize
-	case limit > maxCategoryPageSize:
-		limit = maxCategoryPageSize
+	if offset < 0 {
+		return domain.AnekdotPage{}, fmt.Errorf("%w: offset must not be negative", domain.ErrInvalidInput)
 	}
+
+	limit = clampPageSize(limit)
 
 	if categoryID != nil {
 		if err := s.checkCategory(ctx, *categoryID); err != nil {
-			return nil, err
+			return domain.AnekdotPage{}, err
 		}
 	}
 
-	anekdots, err := s.anekdots.List(ctx, categoryID, limit, offset)
+	anekdots, err := s.anekdots.List(ctx, categoryID, limit, offset, normalizedSort)
 	if err != nil {
-		return nil, fmt.Errorf("listing anecdotes: %w", err)
+		return domain.AnekdotPage{}, fmt.Errorf("listing anecdotes: %w", err)
 	}
 
-	return anekdots, nil
+	total, err := s.anekdots.Count(ctx, categoryID)
+	if err != nil {
+		return domain.AnekdotPage{}, fmt.Errorf("counting anecdotes: %w", err)
+	}
+
+	return domain.AnekdotPage{Anekdots: anekdots, Total: total, Limit: limit, Offset: offset}, nil
+}
+
+func clampPageSize(limit int) int {
+	switch {
+	case limit <= 0:
+		return categoryPageSize
+	case limit > maxCategoryPageSize:
+		return maxCategoryPageSize
+	default:
+		return limit
+	}
+}
+
+func normalizeAnekdotSort(sort domain.AnekdotSort) (domain.AnekdotSort, error) {
+	switch sort {
+	case "":
+		return domain.AnekdotSortCreated, nil
+	case domain.AnekdotSortCreated, domain.AnekdotSortLikes, domain.AnekdotSortFavorites:
+		return sort, nil
+	default:
+		return "", fmt.Errorf("%w: sort must be created, likes or favorites", domain.ErrInvalidInput)
+	}
 }
 
 func (s *AnekdotService) Random(ctx context.Context, categoryID *int) (domain.Anekdot, error) {

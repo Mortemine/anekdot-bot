@@ -133,6 +133,7 @@ h2 {
 .tab:focus-visible,
 .button:focus-visible,
 .chip:focus-visible,
+.page-button:focus-visible,
 .input:focus-visible {
   outline: 3px solid rgba(255, 200, 61, 0.55);
   outline-offset: 2px;
@@ -488,6 +489,130 @@ h2 {
   gap: 8px;
 }
 
+.list-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.control-summary {
+  margin: 0;
+  font-size: 13px;
+}
+
+.list-footer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.sort-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px auto;
+  padding: 4px 8px;
+  border-radius: 8px;
+  color: var(--muted);
+  opacity: 0.7;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.sort-control:hover,
+.sort-control:focus-within {
+  opacity: 1;
+  color: var(--text);
+  background: var(--surface-raised);
+}
+
+.paging-size {
+  margin: 0 0 0 auto;
+}
+
+.sort-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.sort-select {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sort-select:focus-visible {
+  outline: 2px solid rgba(255, 200, 61, 0.55);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
+.sort-select:disabled {
+  cursor: not-allowed;
+}
+
+.sort-select option {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.page-button {
+  min-width: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.page-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.page-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.page-button-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-dark);
+  font-weight: 600;
+}
+
+.pagination-status {
+  margin-left: auto;
+  font-size: 13px;
+}
+
 .like-button {
   display: inline-flex;
   align-items: center;
@@ -654,6 +779,30 @@ h2 {
 
   .category-button {
     flex: 1 1 180px;
+  }
+
+  .list-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sort-control {
+    align-self: flex-start;
+    margin-left: 0;
+  }
+
+  .list-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .paging-size {
+    align-self: flex-start;
+    margin-left: 0;
+  }
+
+  .pagination-status {
+    margin-left: 0;
   }
 }
 

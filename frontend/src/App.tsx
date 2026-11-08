@@ -7,7 +7,7 @@ import { CategorySidebar } from "./components/CategorySidebar";
 import { ExternalPanel } from "./components/ExternalPanel";
 import { SavedPanel } from "./components/SavedPanel";
 import { SubmitPanel } from "./components/SubmitPanel";
-import type { Anekdot, AuthResult, Category, User } from "./types";
+import type { Anekdot, AnekdotSort, AuthResult, Category, User } from "./types";
 
 type Tab = "anekdots" | "external" | "likes" | "favorites" | "submit" | "account";
 
@@ -20,13 +20,18 @@ const tabs: ReadonlyArray<{ id: Tab; label: string }> = [
   { id: "account", label: "Аккаунт" },
 ];
 
-const pageSize = 40;
+const pageSizes = [10, 20, 40, 100] as const;
+const defaultPageSize = 10;
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("anekdots");
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [anekdots, setAnekdots] = useState<Anekdot[]>([]);
+  const [anekdotsTotal, setAnekdotsTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(defaultPageSize);
+  const [sort, setSort] = useState<AnekdotSort>("created");
   const [anekdotsLoading, setAnekdotsLoading] = useState(true);
   const [anekdotsError, setAnekdotsError] = useState<string | null>(null);
   const [likes, setLikes] = useState<Anekdot[]>([]);
@@ -42,32 +47,50 @@ export default function App() {
   const latestLikes = useRef(0);
   const latestFavorites = useRef(0);
 
-  const loadAnekdots = useCallback(async (categoryId: number | null) => {
-    latestAnekdots.current += 1;
-    const requestId = latestAnekdots.current;
+  const loadAnekdots = useCallback(
+    async (categoryId: number | null, pageNumber: number, size: number, order: AnekdotSort) => {
+      latestAnekdots.current += 1;
+      const requestId = latestAnekdots.current;
 
-    setAnekdotsLoading(true);
-    setAnekdotsError(null);
+      setAnekdotsLoading(true);
+      setAnekdotsError(null);
 
-    try {
-      const payload = await api.listAnekdots(categoryId, pageSize);
-      if (requestId !== latestAnekdots.current) {
-        return;
+      try {
+        const payload = await api.listAnekdots(categoryId, {
+          limit: size,
+          offset: (pageNumber - 1) * size,
+          sort: order,
+        });
+        if (requestId !== latestAnekdots.current) {
+          return;
+        }
+
+        setAnekdots(payload.anekdots);
+        setAnekdotsTotal(payload.total);
+
+        const lastPage = Math.max(1, Math.ceil(payload.total / size));
+        if (pageNumber > lastPage) {
+          setPage(lastPage);
+        }
+      } catch (loadError) {
+        if (requestId !== latestAnekdots.current) {
+          return;
+        }
+
+        setAnekdotsError(errorMessage(loadError));
+      } finally {
+        if (requestId === latestAnekdots.current) {
+          setAnekdotsLoading(false);
+        }
       }
+    },
+    [],
+  );
 
-      setAnekdots(payload.anekdots);
-    } catch (loadError) {
-      if (requestId !== latestAnekdots.current) {
-        return;
-      }
-
-      setAnekdotsError(errorMessage(loadError));
-    } finally {
-      if (requestId === latestAnekdots.current) {
-        setAnekdotsLoading(false);
-      }
-    }
-  }, []);
+  const reloadAnecdots = useCallback(
+    () => loadAnekdots(selectedCategory, page, pageSize, sort),
+    [loadAnekdots, page, pageSize, selectedCategory, sort],
+  );
 
   const loadLikes = useCallback(async () => {
     latestLikes.current += 1;
@@ -145,8 +168,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    void loadAnekdots(selectedCategory);
-  }, [loadAnekdots, selectedCategory]);
+    void loadAnekdots(selectedCategory, page, pageSize, sort);
+  }, [loadAnekdots, page, pageSize, selectedCategory, sort]);
 
   useEffect(() => {
     if (getToken() === null) {
@@ -193,7 +216,22 @@ export default function App() {
 
   const handleSelectCategory = useCallback((categoryId: number | null) => {
     setSelectedCategory(categoryId);
+    setPage(1);
     setTab("anekdots");
+  }, []);
+
+  const handlePageChange = useCallback((nextPage: number) => {
+    setPage(Math.max(1, nextPage));
+  }, []);
+
+  const handlePageSizeChange = useCallback((nextPageSize: number) => {
+    setPageSize(nextPageSize);
+    setPage(1);
+  }, []);
+
+  const handleSortChange = useCallback((nextSort: AnekdotSort) => {
+    setSort(nextSort);
+    setPage(1);
   }, []);
 
   const handleAuthenticated = useCallback((result: AuthResult) => {
@@ -228,14 +266,14 @@ export default function App() {
           await api.addLike(target.id);
         }
 
-        await Promise.all([loadLikes(), loadAnekdots(selectedCategory)]);
+        await Promise.all([loadLikes(), reloadAnecdots()]);
       } catch (likeError) {
         setActionError(errorMessage(likeError));
       } finally {
         setBusyID(null);
       }
     },
-    [likedIDs, loadAnekdots, loadLikes, selectedCategory, user],
+    [likedIDs, loadLikes, reloadAnecdots, user],
   );
 
   const handleToggleFavorite = useCallback(
@@ -254,14 +292,14 @@ export default function App() {
           await api.addFavorite(target.id);
         }
 
-        await loadFavorites();
+        await Promise.all([loadFavorites(), reloadAnecdots()]);
       } catch (favoriteError) {
         setActionError(errorMessage(favoriteError));
       } finally {
         setBusyID(null);
       }
     },
-    [favoriteIDs, loadFavorites, user],
+    [favoriteIDs, loadFavorites, reloadAnecdots, user],
   );
 
   const selectedCategoryName = categories.find((category) => category.id === selectedCategory)?.name ?? "Все анекдоты";
@@ -324,7 +362,17 @@ export default function App() {
                 void handleToggleFavorite(target);
               }}
               onReload={() => {
-                void loadAnekdots(selectedCategory);
+                void reloadAnecdots();
+              }}
+              paging={{
+                page,
+                pageSize,
+                total: anekdotsTotal,
+                sort,
+                pageSizeOptions: pageSizes,
+                onPageChange: handlePageChange,
+                onPageSizeChange: handlePageSizeChange,
+                onSortChange: handleSortChange,
               }}
             />
           )}

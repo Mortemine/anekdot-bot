@@ -66,6 +66,9 @@ type anekdotStub struct {
 	listedCategory *int
 	listedLimit    int
 	listedOffset   int
+	listedSort     domain.AnekdotSort
+	total          int
+	totalErr       error
 }
 
 func (s *anekdotStub) Random(context.Context) (domain.Anekdot, error) {
@@ -97,12 +100,22 @@ func (s *anekdotStub) ListByAuthor(context.Context, int64, int) ([]domain.Anekdo
 	return s.authored, s.authoredErr
 }
 
-func (s *anekdotStub) List(_ context.Context, categoryID *int, limit, offset int) ([]domain.Anekdot, error) {
+func (s *anekdotStub) List(
+	_ context.Context,
+	categoryID *int,
+	limit, offset int,
+	sort domain.AnekdotSort,
+) ([]domain.Anekdot, error) {
 	s.listedCategory = categoryID
 	s.listedLimit = limit
 	s.listedOffset = offset
+	s.listedSort = sort
 
 	return s.listed, s.listedErr
+}
+
+func (s *anekdotStub) Count(context.Context, *int) (int, error) {
+	return s.total, s.totalErr
 }
 
 type externalStub struct {
@@ -281,6 +294,7 @@ func newFixture() *fixture {
 			created:    domain.Anekdot{ID: 6, CategoryID: 1, Text: "свой анекдот"},
 			authored:   []domain.Anekdot{{ID: 6, CategoryID: 1, Text: "свой анекдот"}},
 			listed:     []domain.Anekdot{{ID: 3, CategoryID: 1, Text: "первый", LikeCount: 2}},
+			total:      42,
 		},
 		external:  &externalStub{text: "внешний"},
 		likes:     &reactionStub{list: []domain.Anekdot{{ID: 4, CategoryID: 1, Text: "лайкнутый", LikeCount: 5}}},
@@ -919,7 +933,14 @@ func TestAnekdotsEndpoint(t *testing.T) {
 	handler := f.handler(t)
 
 	t.Run("lists a category page", func(t *testing.T) {
-		recorder := perform(t, handler, http.MethodGet, "/api/v1/anekdots?category_id=1&limit=5&offset=10", nil, nil)
+		recorder := perform(
+			t,
+			handler,
+			http.MethodGet,
+			"/api/v1/anekdots?category_id=1&limit=5&offset=10&sort=favorites",
+			nil,
+			nil,
+		)
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
 		}
@@ -928,11 +949,17 @@ func TestAnekdotsEndpoint(t *testing.T) {
 		if len(payload.Anekdots) != 1 || payload.Anekdots[0].LikeCount != 2 {
 			t.Errorf("anekdots = %+v", payload.Anekdots)
 		}
+		if payload.Total != 42 || payload.Limit != 5 || payload.Offset != 10 {
+			t.Errorf("page metadata = %+v", payload)
+		}
 		if f.anekdots.listedCategory == nil || *f.anekdots.listedCategory != 1 {
 			t.Errorf("listed category = %v, want 1", f.anekdots.listedCategory)
 		}
 		if f.anekdots.listedLimit != 5 || f.anekdots.listedOffset != 10 {
 			t.Errorf("limit = %d, offset = %d, want 5 and 10", f.anekdots.listedLimit, f.anekdots.listedOffset)
+		}
+		if f.anekdots.listedSort != domain.AnekdotSortFavorites {
+			t.Errorf("sort = %q, want favorites", f.anekdots.listedSort)
 		}
 	})
 
@@ -944,7 +971,15 @@ func TestAnekdotsEndpoint(t *testing.T) {
 		if f.anekdots.listedCategory != nil {
 			t.Errorf("listed category = %v, want nil", f.anekdots.listedCategory)
 		}
+		if f.anekdots.listedSort != domain.AnekdotSortCreated {
+			t.Errorf("sort = %q, want created", f.anekdots.listedSort)
+		}
 	})
+}
+
+func TestAnekdotsEndpointRejectsBadParams(t *testing.T) {
+	f := newFixture()
+	handler := f.handler(t)
 
 	t.Run("invalid paging", func(t *testing.T) {
 		for _, target := range []string{"/api/v1/anekdots?limit=abc", "/api/v1/anekdots?offset=-1"} {
@@ -952,6 +987,13 @@ func TestAnekdotsEndpoint(t *testing.T) {
 			if recorder.Code != http.StatusBadRequest {
 				t.Fatalf("GET %s status = %d, want 400", target, recorder.Code)
 			}
+		}
+	})
+
+	t.Run("invalid sort", func(t *testing.T) {
+		recorder := perform(t, handler, http.MethodGet, "/api/v1/anekdots?sort=popular", nil, nil)
+		if recorder.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400", recorder.Code)
 		}
 	})
 

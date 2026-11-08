@@ -13,13 +13,29 @@ type CategorySummary struct {
 }
 
 type Anekdot struct {
-	ID           int64
-	CategoryID   int
-	CategoryName string
-	Text         string
-	AuthorID     *int64
-	CreatedAt    time.Time
-	LikeCount    int
+	ID            int64
+	CategoryID    int
+	CategoryName  string
+	Text          string
+	AuthorID      *int64
+	CreatedAt     time.Time
+	LikeCount     int
+	FavoriteCount int
+}
+
+type AnekdotSort string
+
+const (
+	AnekdotSortCreated   AnekdotSort = "created"
+	AnekdotSortLikes     AnekdotSort = "likes"
+	AnekdotSortFavorites AnekdotSort = "favorites"
+)
+
+type AnekdotPage struct {
+	Anekdots []Anekdot
+	Total    int
+	Limit    int
+	Offset   int
 }
 
 type User struct {

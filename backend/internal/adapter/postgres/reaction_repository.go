@@ -31,7 +31,7 @@ func newReactionRepository(pool *pgxpool.Pool, table, noun string) reactionRepos
 		noun: noun,
 		query: reactionQueries{
 			list: `
-	SELECT a.id, a.category_id, c.name, a.text, a.author_id, a.created_at,` + anekdotLikeCount + `
+	SELECT a.id, a.category_id, c.name, a.text, a.author_id, a.created_at,` + anekdotCounters + `
 	FROM ` + table + ` r
 	JOIN anekdots a ON a.id = r.anekdot_id
 	JOIN categories c ON c.id = a.category_id

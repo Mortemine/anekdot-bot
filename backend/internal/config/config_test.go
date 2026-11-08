@@ -46,9 +46,6 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.DatabaseURL != defaultDatabaseURL {
 		t.Errorf("DatabaseURL = %q, want %q", cfg.DatabaseURL, defaultDatabaseURL)
 	}
-	if cfg.DBMaxConns != 10 || cfg.DBMinConns != 2 {
-		t.Errorf("pool sizes = (%d, %d), want (10, 2)", cfg.DBMaxConns, cfg.DBMinConns)
-	}
 	if cfg.LogLevel != slog.LevelInfo {
 		t.Errorf("LogLevel = %v, want info", cfg.LogLevel)
 	}
@@ -61,14 +58,42 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.ShutdownTimeout != 15*time.Second {
 		t.Errorf("ShutdownTimeout = %v, want 15s", cfg.ShutdownTimeout)
 	}
-	if cfg.SessionTTL != 30*24*time.Hour {
-		t.Errorf("SessionTTL = %v, want 720h", cfg.SessionTTL)
-	}
 	if len(cfg.CORSOrigins) != 1 || cfg.CORSOrigins[0] != "http://localhost:5173" {
 		t.Errorf("CORSOrigins = %v, want [http://localhost:5173]", cfg.CORSOrigins)
 	}
 	if cfg.ExternalAnekdotURL != defaultExternalURL {
 		t.Errorf("ExternalAnekdotURL = %q, want %q", cfg.ExternalAnekdotURL, defaultExternalURL)
+	}
+}
+
+func TestLoadInfrastructureDefaults(t *testing.T) {
+	cleanEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.DBMaxConns != 10 || cfg.DBMinConns != 2 {
+		t.Errorf("pool sizes = (%d, %d), want (10, 2)", cfg.DBMaxConns, cfg.DBMinConns)
+	}
+	if cfg.DBMaxConnLifetime != 30*time.Minute {
+		t.Errorf("DBMaxConnLifetime = %v, want 30m", cfg.DBMaxConnLifetime)
+	}
+	if cfg.DBMaxConnIdleTime != 5*time.Minute {
+		t.Errorf("DBMaxConnIdleTime = %v, want 5m", cfg.DBMaxConnIdleTime)
+	}
+	if cfg.SessionTTL != 720*time.Hour {
+		t.Errorf("SessionTTL = %v, want 720h", cfg.SessionTTL)
+	}
+	if cfg.TrustProxyHeaders {
+		t.Error("TrustProxyHeaders = true, want false")
+	}
+	if cfg.WebDir != "web" {
+		t.Errorf("WebDir = %q, want web", cfg.WebDir)
+	}
+	if cfg.DataDir != "../data" {
+		t.Errorf("DataDir = %q, want ../data", cfg.DataDir)
 	}
 }
 
@@ -86,6 +111,8 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("SHUTDOWN_TIMEOUT", "5s")
 	t.Setenv("DB_MAX_CONNS", "20")
 	t.Setenv("DB_MIN_CONNS", "4")
+	t.Setenv("WEB_DIR", "/srv/web")
+	t.Setenv("DATA_DIR", "/srv/data")
 
 	cfg, err := Load()
 	if err != nil {
@@ -112,6 +139,12 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if cfg.DBMaxConns != 20 || cfg.DBMinConns != 4 {
 		t.Errorf("pool sizes = (%d, %d), want (20, 4)", cfg.DBMaxConns, cfg.DBMinConns)
+	}
+	if cfg.WebDir != "/srv/web" {
+		t.Errorf("WebDir = %q, want /srv/web", cfg.WebDir)
+	}
+	if cfg.DataDir != "/srv/data" {
+		t.Errorf("DataDir = %q, want /srv/data", cfg.DataDir)
 	}
 	if len(cfg.CORSOrigins) != 2 || cfg.CORSOrigins[0] != "https://example.com" {
 		t.Errorf("CORSOrigins = %v", cfg.CORSOrigins)

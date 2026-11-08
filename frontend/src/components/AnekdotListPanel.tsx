@@ -1,4 +1,15 @@
-import type { Anekdot } from "../types";
+import type { Anekdot, AnekdotSort } from "../types";
+
+export interface AnekdotPaging {
+  page: number;
+  pageSize: number;
+  total: number;
+  sort: AnekdotSort;
+  pageSizeOptions: readonly number[];
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+  onSortChange: (sort: AnekdotSort) => void;
+}
 
 interface Props {
   heading: string;
@@ -14,6 +25,20 @@ interface Props {
   onToggleLike: (target: Anekdot) => void;
   onToggleFavorite: (target: Anekdot) => void;
   onReload: () => void;
+  paging?: AnekdotPaging;
+}
+
+const pageWindowRadius = 3;
+
+function pageNumbers(current: number, totalPages: number): number[] {
+  const size = pageWindowRadius * 2 + 1;
+  if (totalPages <= size) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const start = Math.min(Math.max(current - pageWindowRadius, 1), totalPages - size + 1);
+
+  return Array.from({ length: size }, (_, index) => start + index);
 }
 
 export function AnekdotListPanel({
@@ -30,7 +55,11 @@ export function AnekdotListPanel({
   onToggleLike,
   onToggleFavorite,
   onReload,
+  paging,
 }: Props) {
+  const totalPages = paging === undefined ? 1 : Math.max(1, Math.ceil(paging.total / paging.pageSize));
+  const pages = paging === undefined ? [] : pageNumbers(paging.page, totalPages);
+
   return (
     <section className="panel">
       <div className="panel-heading">
@@ -42,6 +71,28 @@ export function AnekdotListPanel({
           Обновить
         </button>
       </div>
+
+      {paging !== undefined && (
+        <div className="list-controls">
+          <p className="control-summary muted">Всего анекдотов: {paging.total}</p>
+          <label className="sort-control" title="Сортировка">
+            <span className="sort-icon" aria-hidden="true">
+              ⇅
+            </span>
+            <select
+              className="sort-select"
+              aria-label="Сортировка"
+              value={paging.sort}
+              disabled={loading}
+              onChange={(event) => paging.onSortChange(event.target.value as AnekdotSort)}
+            >
+              <option value="created">По дате создания</option>
+              <option value="likes">По лайкам</option>
+              <option value="favorites">По избранному</option>
+            </select>
+          </label>
+        </div>
+      )}
 
       {error !== null && <p className="alert">{error}</p>}
 
@@ -90,6 +141,7 @@ export function AnekdotListPanel({
                       onClick={() => onToggleFavorite(item)}
                     >
                       <span aria-hidden="true">{favorite ? "★" : "☆"}</span>
+                      <span className="like-count">{item.favorite_count}</span>
                     </button>
                   </div>
                 </div>
@@ -97,6 +149,64 @@ export function AnekdotListPanel({
             );
           })}
         </ul>
+      )}
+
+      {paging !== undefined && (
+        <div className="list-footer">
+          {totalPages > 1 && (
+            <nav className="pagination" aria-label="Постраничная навигация">
+              <button
+                type="button"
+                className="page-button"
+                disabled={loading || paging.page <= 1}
+                onClick={() => paging.onPageChange(paging.page - 1)}
+              >
+                Назад
+              </button>
+              {pages.map((number) => (
+                <button
+                  key={number}
+                  type="button"
+                  className={number === paging.page ? "page-button page-button-active" : "page-button"}
+                  aria-current={number === paging.page ? "page" : undefined}
+                  disabled={loading}
+                  onClick={() => paging.onPageChange(number)}
+                >
+                  {number}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="page-button"
+                disabled={loading || paging.page >= totalPages}
+                onClick={() => paging.onPageChange(paging.page + 1)}
+              >
+                Вперёд
+              </button>
+              <span className="pagination-status muted">
+                Страница {paging.page} из {totalPages}
+              </span>
+            </nav>
+          )}
+          <label className="sort-control paging-size" title="Количество на странице">
+            <span className="sort-icon" aria-hidden="true">
+              На странице
+            </span>
+            <select
+              className="sort-select"
+              aria-label="Количество на странице"
+              value={paging.pageSize}
+              disabled={loading}
+              onChange={(event) => paging.onPageSizeChange(Number(event.target.value))}
+            >
+              {paging.pageSizeOptions.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       )}
     </section>
   );

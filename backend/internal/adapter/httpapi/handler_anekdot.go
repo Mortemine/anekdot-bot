@@ -22,12 +22,13 @@ type categoryDTO struct {
 }
 
 type anekdotDTO struct {
-	ID           int64  `json:"id"`
-	CategoryID   int    `json:"category_id"`
-	CategoryName string `json:"category_name"`
-	Text         string `json:"text"`
-	LikeCount    int    `json:"like_count"`
-	AuthorID     *int64 `json:"author_id,omitempty"`
+	ID            int64  `json:"id"`
+	CategoryID    int    `json:"category_id"`
+	CategoryName  string `json:"category_name"`
+	Text          string `json:"text"`
+	LikeCount     int    `json:"like_count"`
+	FavoriteCount int    `json:"favorite_count"`
+	AuthorID      *int64 `json:"author_id,omitempty"`
 }
 
 type externalAnekdotDTO struct {
@@ -45,6 +46,9 @@ type anekdotResponse struct {
 
 type anekdotsResponse struct {
 	Anekdots []anekdotDTO `json:"anekdots"`
+	Total    int          `json:"total"`
+	Limit    int          `json:"limit"`
+	Offset   int          `json:"offset"`
 }
 
 type externalAnekdotResponse struct {
@@ -119,14 +123,24 @@ func (h *AnekdotHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	anekdots, err := h.service.Anekdots(r.Context(), filter, limit, offset)
+	sort, ok := parseAnekdotSort(w, query.Get("sort"))
+	if !ok {
+		return
+	}
+
+	page, err := h.service.Anekdots(r.Context(), filter, limit, offset, sort)
 	if err != nil {
 		h.handleError(w, r, err)
 
 		return
 	}
 
-	writeJSON(w, http.StatusOK, anekdotsResponse{Anekdots: toAnekdotsDTO(anekdots)})
+	writeJSON(w, http.StatusOK, anekdotsResponse{
+		Anekdots: toAnekdotsDTO(page.Anekdots),
+		Total:    page.Total,
+		Limit:    page.Limit,
+		Offset:   page.Offset,
+	})
 }
 
 func (h *AnekdotHandler) External(w http.ResponseWriter, r *http.Request) {
@@ -176,7 +190,11 @@ func (h *AnekdotHandler) Mine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, anekdotsResponse{Anekdots: toAnekdotsDTO(anekdots)})
+	writeJSON(w, http.StatusOK, anekdotsResponse{
+		Anekdots: toAnekdotsDTO(anekdots),
+		Total:    len(anekdots),
+		Limit:    len(anekdots),
+	})
 }
 
 func toAnekdotsDTO(anekdots []domain.Anekdot) []anekdotDTO {
@@ -240,13 +258,32 @@ func parsePageParam(w http.ResponseWriter, raw string) (int, bool) {
 	return value, true
 }
 
+func parseAnekdotSort(w http.ResponseWriter, raw string) (domain.AnekdotSort, bool) {
+	switch domain.AnekdotSort(raw) {
+	case "":
+		return domain.AnekdotSortCreated, true
+	case domain.AnekdotSortCreated, domain.AnekdotSortLikes, domain.AnekdotSortFavorites:
+		return domain.AnekdotSort(raw), true
+	default:
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"invalid_input",
+			"Параметр sort должен быть одним из: created, likes, favorites.",
+		)
+
+		return "", false
+	}
+}
+
 func toAnekdotDTO(anekdot domain.Anekdot) anekdotDTO {
 	return anekdotDTO{
-		ID:           anekdot.ID,
-		CategoryID:   anekdot.CategoryID,
-		CategoryName: anekdot.CategoryName,
-		Text:         anekdot.Text,
-		LikeCount:    anekdot.LikeCount,
-		AuthorID:     anekdot.AuthorID,
+		ID:            anekdot.ID,
+		CategoryID:    anekdot.CategoryID,
+		CategoryName:  anekdot.CategoryName,
+		Text:          anekdot.Text,
+		LikeCount:     anekdot.LikeCount,
+		FavoriteCount: anekdot.FavoriteCount,
+		AuthorID:      anekdot.AuthorID,
 	}
 }

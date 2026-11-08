@@ -14,7 +14,8 @@ type AnekdotRepository interface {
 	ByID(ctx context.Context, id int64) (Anekdot, error)
 	Create(ctx context.Context, anekdot Anekdot) (Anekdot, error)
 	ListByAuthor(ctx context.Context, authorID int64, limit int) ([]Anekdot, error)
-	List(ctx context.Context, categoryID *int, limit, offset int) ([]Anekdot, error)
+	List(ctx context.Context, categoryID *int, limit, offset int, sort AnekdotSort) ([]Anekdot, error)
+	Count(ctx context.Context, categoryID *int) (int, error)
 }
 
 type UserRepository interface {

@@ -30,18 +30,21 @@ func (s *categoryRepositoryStub) Get(ctx context.Context, id int) (domain.Catego
 }
 
 type anekdotRepositoryStub struct {
-	listed      []domain.Anekdot
-	listErr     error
-	byID        *domain.Anekdot
-	byIDErr     error
-	created     domain.Anekdot
-	createErr   error
-	createdWith domain.Anekdot
-	counts      map[int]int
-	countsErr   error
-	receivedCat *int
-	receivedLim int
-	receivedOff int
+	listed       []domain.Anekdot
+	listErr      error
+	byID         *domain.Anekdot
+	byIDErr      error
+	created      domain.Anekdot
+	createErr    error
+	createdWith  domain.Anekdot
+	counts       map[int]int
+	countsErr    error
+	receivedCat  *int
+	receivedLim  int
+	receivedOff  int
+	receivedSort domain.AnekdotSort
+	total        int
+	countErr     error
 }
 
 func (s *anekdotRepositoryStub) Random(ctx context.Context) (domain.Anekdot, error) {
@@ -97,12 +100,18 @@ func (s *anekdotRepositoryStub) List(
 	categoryID *int,
 	limit int,
 	offset int,
+	sort domain.AnekdotSort,
 ) ([]domain.Anekdot, error) {
 	s.receivedCat = categoryID
 	s.receivedLim = limit
 	s.receivedOff = offset
+	s.receivedSort = sort
 
 	return s.listed, s.listErr
+}
+
+func (s *anekdotRepositoryStub) Count(ctx context.Context, categoryID *int) (int, error) {
+	return s.total, s.countErr
 }
 
 type reactionRepositoryStub struct {
@@ -221,16 +230,20 @@ func TestAnekdotServiceListCategories(t *testing.T) {
 
 func TestAnekdotServiceAnekdots(t *testing.T) {
 	t.Run("lists category page", func(t *testing.T) {
-		anekdots := &anekdotRepositoryStub{listed: []domain.Anekdot{{ID: 1, Text: "текст"}}}
+		anekdots := &anekdotRepositoryStub{listed: []domain.Anekdot{{ID: 1, Text: "текст"}}, total: 42}
 		service := newTestService(serviceDeps{anekdots: anekdots})
 
-		got, err := service.Anekdots(context.Background(), intPtr(2), 10, 20)
+		got, err := service.Anekdots(context.Background(), intPtr(2), 10, 20, domain.AnekdotSortLikes)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if len(got) != 1 || got[0].ID != 1 {
-			t.Fatalf("unexpected anekdots: %+v", got)
+		if len(got.Anekdots) != 1 || got.Anekdots[0].ID != 1 {
+			t.Fatalf("unexpected anekdots: %+v", got.Anekdots)
+		}
+
+		if got.Total != 42 || got.Limit != 10 || got.Offset != 20 {
+			t.Fatalf("unexpected page metadata: %+v", got)
 		}
 
 		if anekdots.receivedCat == nil || *anekdots.receivedCat != 2 {
@@ -240,13 +253,19 @@ func TestAnekdotServiceAnekdots(t *testing.T) {
 		if anekdots.receivedLim != 10 || anekdots.receivedOff != 20 {
 			t.Fatalf("unexpected page: %d %d", anekdots.receivedLim, anekdots.receivedOff)
 		}
-	})
 
+		if anekdots.receivedSort != domain.AnekdotSortLikes {
+			t.Fatalf("unexpected sort: %q", anekdots.receivedSort)
+		}
+	})
+}
+
+func TestAnekdotServiceAnekdotsPaging(t *testing.T) {
 	t.Run("lists everything without a category", func(t *testing.T) {
 		anekdots := &anekdotRepositoryStub{}
 		service := newTestService(serviceDeps{anekdots: anekdots})
 
-		if _, err := service.Anekdots(context.Background(), nil, 0, 0); err != nil {
+		if _, err := service.Anekdots(context.Background(), nil, 0, 0, ""); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -257,13 +276,17 @@ func TestAnekdotServiceAnekdots(t *testing.T) {
 		if anekdots.receivedLim != categoryPageSize || anekdots.receivedOff != 0 {
 			t.Fatalf("unexpected page: %d %d", anekdots.receivedLim, anekdots.receivedOff)
 		}
+
+		if anekdots.receivedSort != domain.AnekdotSortCreated {
+			t.Fatalf("unexpected sort: %q", anekdots.receivedSort)
+		}
 	})
 
 	t.Run("caps the page size", func(t *testing.T) {
 		anekdots := &anekdotRepositoryStub{}
 		service := newTestService(serviceDeps{anekdots: anekdots})
 
-		if _, err := service.Anekdots(context.Background(), intPtr(1), 1000, 0); err != nil {
+		if _, err := service.Anekdots(context.Background(), intPtr(1), 1000, 0, ""); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -277,7 +300,16 @@ func TestAnekdotServiceAnekdotsErrors(t *testing.T) {
 	t.Run("rejects negative offset", func(t *testing.T) {
 		service := newTestService(serviceDeps{})
 
-		_, err := service.Anekdots(context.Background(), nil, 10, -1)
+		_, err := service.Anekdots(context.Background(), nil, 10, -1, "")
+		if !errors.Is(err, domain.ErrInvalidInput) {
+			t.Fatalf("expected invalid input, got %v", err)
+		}
+	})
+
+	t.Run("rejects unknown sort", func(t *testing.T) {
+		service := newTestService(serviceDeps{})
+
+		_, err := service.Anekdots(context.Background(), nil, 10, 0, "popular")
 		if !errors.Is(err, domain.ErrInvalidInput) {
 			t.Fatalf("expected invalid input, got %v", err)
 		}
@@ -287,7 +319,7 @@ func TestAnekdotServiceAnekdotsErrors(t *testing.T) {
 		anekdots := &anekdotRepositoryStub{}
 		service := newTestService(serviceDeps{anekdots: anekdots})
 
-		if _, err := service.Anekdots(context.Background(), nil, -5, 0); err != nil {
+		if _, err := service.Anekdots(context.Background(), nil, -5, 0, ""); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -299,7 +331,8 @@ func TestAnekdotServiceAnekdotsErrors(t *testing.T) {
 	t.Run("rejects unknown category", func(t *testing.T) {
 		service := newTestService(serviceDeps{categories: &categoryRepositoryStub{getErr: domain.ErrNotFound}})
 
-		if _, err := service.Anekdots(context.Background(), intPtr(7), 10, 0); !errors.Is(err, domain.ErrNotFound) {
+		_, err := service.Anekdots(context.Background(), intPtr(7), 10, 0, "")
+		if !errors.Is(err, domain.ErrNotFound) {
 			t.Fatalf("expected not found, got %v", err)
 		}
 	})
@@ -307,7 +340,15 @@ func TestAnekdotServiceAnekdotsErrors(t *testing.T) {
 	t.Run("propagates repository error", func(t *testing.T) {
 		service := newTestService(serviceDeps{anekdots: &anekdotRepositoryStub{listErr: errors.New("boom")}})
 
-		if _, err := service.Anekdots(context.Background(), nil, 10, 0); err == nil {
+		if _, err := service.Anekdots(context.Background(), nil, 10, 0, ""); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("propagates counting error", func(t *testing.T) {
+		service := newTestService(serviceDeps{anekdots: &anekdotRepositoryStub{countErr: errors.New("boom")}})
+
+		if _, err := service.Anekdots(context.Background(), nil, 10, 0, ""); err == nil {
 			t.Fatal("expected error")
 		}
 	})

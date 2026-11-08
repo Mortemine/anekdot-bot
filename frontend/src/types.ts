@@ -10,7 +10,17 @@ export interface Anekdot {
   category_name: string;
   text: string;
   like_count: number;
+  favorite_count: number;
   author_id?: number;
+}
+
+export type AnekdotSort = "created" | "likes" | "favorites";
+
+export interface AnekdotPage {
+  anekdots: Anekdot[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface ExternalAnekdot {
