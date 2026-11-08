@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: anekdot-postgres
+    environment:
+      POSTGRES_USER: anekdot
+      POSTGRES_PASSWORD: anekdot
+      POSTGRES_DB: anekdot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U anekdot -d anekdot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
