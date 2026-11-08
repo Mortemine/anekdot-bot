@@ -57,6 +57,13 @@ type anekdotRepositoryStub struct {
 	authored         []domain.Anekdot
 	authoredErr      error
 	receivedAuthorID int64
+
+	listed          []domain.Anekdot
+	listedErr       error
+	listedCategory  *int
+	listedLimit     int
+	listedOffset    int
+	listedCallCount int
 }
 
 func (s *anekdotRepositoryStub) Random(context.Context) (domain.Anekdot, error) {
@@ -90,7 +97,16 @@ func (s *anekdotRepositoryStub) ListByAuthor(_ context.Context, authorID int64, 
 	return s.authored, s.authoredErr
 }
 
-type favoriteRepositoryStub struct {
+func (s *anekdotRepositoryStub) List(_ context.Context, categoryID *int, limit, offset int) ([]domain.Anekdot, error) {
+	s.listedCallCount++
+	s.listedCategory = categoryID
+	s.listedLimit = limit
+	s.listedOffset = offset
+
+	return s.listed, s.listedErr
+}
+
+type likeRepositoryStub struct {
 	list           []domain.Anekdot
 	listErr        error
 	addErr         error
@@ -100,20 +116,20 @@ type favoriteRepositoryStub struct {
 	receivedUserID int64
 }
 
-func (s *favoriteRepositoryStub) List(_ context.Context, userID int64) ([]domain.Anekdot, error) {
+func (s *likeRepositoryStub) List(_ context.Context, userID int64) ([]domain.Anekdot, error) {
 	s.receivedUserID = userID
 
 	return s.list, s.listErr
 }
 
-func (s *favoriteRepositoryStub) Add(_ context.Context, userID, anekdotID int64) error {
+func (s *likeRepositoryStub) Add(_ context.Context, userID, anekdotID int64) error {
 	s.receivedUserID = userID
 	s.added = append(s.added, anekdotID)
 
 	return s.addErr
 }
 
-func (s *favoriteRepositoryStub) Remove(_ context.Context, userID, anekdotID int64) error {
+func (s *likeRepositoryStub) Remove(_ context.Context, userID, anekdotID int64) error {
 	s.receivedUserID = userID
 	s.removed = append(s.removed, anekdotID)
 
@@ -135,7 +151,7 @@ func TestAnekdotServiceListCategories(t *testing.T) {
 			categories: []domain.Category{{ID: 1, Name: "Разные"}, {ID: 2, Name: "Школьные"}},
 		},
 		&anekdotRepositoryStub{counts: map[int]int{1: 7}},
-		&favoriteRepositoryStub{},
+		&likeRepositoryStub{},
 		&externalSourceStub{},
 		discardLogger(),
 	)
@@ -176,7 +192,7 @@ func TestAnekdotServiceListCategoriesErrors(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			service := NewAnekdotService(test.categories, test.anekdots, &favoriteRepositoryStub{}, &externalSourceStub{}, discardLogger())
+			service := NewAnekdotService(test.categories, test.anekdots, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
 
 			if _, err := service.ListCategories(context.Background()); err == nil {
 				t.Fatal("ListCategories() error = nil, want error")
@@ -185,11 +201,101 @@ func TestAnekdotServiceListCategoriesErrors(t *testing.T) {
 	}
 }
 
+func TestAnekdotServiceAnekdots(t *testing.T) {
+	categories := &categoryRepositoryStub{byID: map[int]domain.Category{3: {ID: 3, Name: "Школьные"}}}
+
+	t.Run("lists category page", func(t *testing.T) {
+		anekdots := &anekdotRepositoryStub{listed: []domain.Anekdot{{ID: 1, LikeCount: 4}, {ID: 2}}}
+		service := NewAnekdotService(categories, anekdots, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
+
+		categoryID := 3
+		list, err := service.Anekdots(context.Background(), &categoryID, 10, 20)
+		if err != nil {
+			t.Fatalf("Anekdots() error = %v", err)
+		}
+		if len(list) != 2 || list[0].LikeCount != 4 {
+			t.Errorf("Anekdots() = %+v", list)
+		}
+		if anekdots.listedCategory == nil || *anekdots.listedCategory != 3 {
+			t.Errorf("listed category = %v, want 3", anekdots.listedCategory)
+		}
+		if anekdots.listedLimit != 10 || anekdots.listedOffset != 20 {
+			t.Errorf("limit = %d, offset = %d, want 10 and 20", anekdots.listedLimit, anekdots.listedOffset)
+		}
+	})
+
+	t.Run("lists everything without a category", func(t *testing.T) {
+		anekdots := &anekdotRepositoryStub{}
+		service := NewAnekdotService(categories, anekdots, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
+
+		if _, err := service.Anekdots(context.Background(), nil, 0, 0); err != nil {
+			t.Fatalf("Anekdots() error = %v", err)
+		}
+		if anekdots.listedCategory != nil {
+			t.Errorf("listed category = %v, want nil", anekdots.listedCategory)
+		}
+		if anekdots.listedLimit != categoryPageSize {
+			t.Errorf("limit = %d, want %d", anekdots.listedLimit, categoryPageSize)
+		}
+	})
+
+	t.Run("caps the page size", func(t *testing.T) {
+		anekdots := &anekdotRepositoryStub{}
+		service := NewAnekdotService(categories, anekdots, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
+
+		if _, err := service.Anekdots(context.Background(), nil, maxCategoryPageSize+50, 0); err != nil {
+			t.Fatalf("Anekdots() error = %v", err)
+		}
+		if anekdots.listedLimit != maxCategoryPageSize {
+			t.Errorf("limit = %d, want %d", anekdots.listedLimit, maxCategoryPageSize)
+		}
+	})
+}
+
+func TestAnekdotServiceAnekdotsErrors(t *testing.T) {
+	categories := &categoryRepositoryStub{byID: map[int]domain.Category{3: {ID: 3, Name: "Школьные"}}}
+
+	t.Run("rejects negative offset", func(t *testing.T) {
+		service := NewAnekdotService(categories, &anekdotRepositoryStub{}, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
+
+		if _, err := service.Anekdots(context.Background(), nil, 10, -1); !errors.Is(err, domain.ErrInvalidInput) {
+			t.Fatalf("Anekdots() error = %v, want ErrInvalidInput", err)
+		}
+	})
+
+	t.Run("rejects negative category", func(t *testing.T) {
+		service := NewAnekdotService(categories, &anekdotRepositoryStub{}, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
+
+		categoryID := -1
+		if _, err := service.Anekdots(context.Background(), &categoryID, 10, 0); !errors.Is(err, domain.ErrInvalidInput) {
+			t.Fatalf("Anekdots() error = %v, want ErrInvalidInput", err)
+		}
+	})
+
+	t.Run("rejects unknown category", func(t *testing.T) {
+		service := NewAnekdotService(categories, &anekdotRepositoryStub{}, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
+
+		categoryID := 42
+		if _, err := service.Anekdots(context.Background(), &categoryID, 10, 0); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("Anekdots() error = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("repository failure", func(t *testing.T) {
+		anekdots := &anekdotRepositoryStub{listedErr: errors.New("boom")}
+		service := NewAnekdotService(categories, anekdots, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
+
+		if _, err := service.Anekdots(context.Background(), nil, 10, 0); err == nil {
+			t.Fatal("Anekdots() error = nil, want error")
+		}
+	})
+}
+
 func TestAnekdotServiceRandom(t *testing.T) {
 	t.Run("global", func(t *testing.T) {
 		expected := domain.Anekdot{ID: 10, Text: "анекдот"}
 		anekdots := &anekdotRepositoryStub{random: expected}
-		service := NewAnekdotService(&categoryRepositoryStub{}, anekdots, &favoriteRepositoryStub{}, &externalSourceStub{}, discardLogger())
+		service := NewAnekdotService(&categoryRepositoryStub{}, anekdots, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
 
 		anekdot, err := service.Random(context.Background(), nil)
 		if err != nil {
@@ -207,7 +313,7 @@ func TestAnekdotServiceRandom(t *testing.T) {
 		expected := domain.Anekdot{ID: 11, CategoryID: 3, Text: "школьный"}
 		categories := &categoryRepositoryStub{byID: map[int]domain.Category{3: {ID: 3, Name: "Школьные"}}}
 		anekdots := &anekdotRepositoryStub{byCategory: expected}
-		service := NewAnekdotService(categories, anekdots, &favoriteRepositoryStub{}, &externalSourceStub{}, discardLogger())
+		service := NewAnekdotService(categories, anekdots, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
 
 		categoryID := 3
 		anekdot, err := service.Random(context.Background(), &categoryID)
@@ -226,7 +332,7 @@ func TestAnekdotServiceRandom(t *testing.T) {
 		expected := domain.Anekdot{ID: 12, CategoryID: 0, Text: "без категории"}
 		categories := &categoryRepositoryStub{byID: map[int]domain.Category{0: {ID: 0, Name: "Вне категорий"}}}
 		anekdots := &anekdotRepositoryStub{byCategory: expected}
-		service := NewAnekdotService(categories, anekdots, &favoriteRepositoryStub{}, &externalSourceStub{}, discardLogger())
+		service := NewAnekdotService(categories, anekdots, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
 
 		categoryID := 0
 		anekdot, err := service.Random(context.Background(), &categoryID)
@@ -239,7 +345,7 @@ func TestAnekdotServiceRandom(t *testing.T) {
 	})
 
 	t.Run("invalid category id", func(t *testing.T) {
-		service := NewAnekdotService(&categoryRepositoryStub{}, &anekdotRepositoryStub{}, &favoriteRepositoryStub{}, &externalSourceStub{}, discardLogger())
+		service := NewAnekdotService(&categoryRepositoryStub{}, &anekdotRepositoryStub{}, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
 
 		categoryID := -1
 		_, err := service.Random(context.Background(), &categoryID)
@@ -250,7 +356,7 @@ func TestAnekdotServiceRandom(t *testing.T) {
 
 	t.Run("unknown category", func(t *testing.T) {
 		categories := &categoryRepositoryStub{byID: map[int]domain.Category{}}
-		service := NewAnekdotService(categories, &anekdotRepositoryStub{}, &favoriteRepositoryStub{}, &externalSourceStub{}, discardLogger())
+		service := NewAnekdotService(categories, &anekdotRepositoryStub{}, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
 
 		categoryID := 42
 		_, err := service.Random(context.Background(), &categoryID)
@@ -261,7 +367,7 @@ func TestAnekdotServiceRandom(t *testing.T) {
 
 	t.Run("repository failure", func(t *testing.T) {
 		anekdots := &anekdotRepositoryStub{randomErr: errors.New("boom")}
-		service := NewAnekdotService(&categoryRepositoryStub{}, anekdots, &favoriteRepositoryStub{}, &externalSourceStub{}, discardLogger())
+		service := NewAnekdotService(&categoryRepositoryStub{}, anekdots, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
 
 		if _, err := service.Random(context.Background(), nil); err == nil {
 			t.Fatal("Random() error = nil, want error")
@@ -273,7 +379,7 @@ func TestAnekdotServiceExternal(t *testing.T) {
 	service := NewAnekdotService(
 		&categoryRepositoryStub{},
 		&anekdotRepositoryStub{},
-		&favoriteRepositoryStub{},
+		&likeRepositoryStub{},
 		&externalSourceStub{text: "внешний анекдот"},
 		discardLogger(),
 	)
@@ -288,7 +394,7 @@ func TestAnekdotServiceExternal(t *testing.T) {
 }
 
 func newSubmitService(categories *categoryRepositoryStub, anekdots *anekdotRepositoryStub) *AnekdotService {
-	return NewAnekdotService(categories, anekdots, &favoriteRepositoryStub{}, &externalSourceStub{}, discardLogger())
+	return NewAnekdotService(categories, anekdots, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
 }
 
 func TestAnekdotServiceCreate(t *testing.T) {
@@ -367,66 +473,75 @@ func TestAnekdotServiceMine(t *testing.T) {
 	}
 }
 
-func TestAnekdotServiceFavorites(t *testing.T) {
+func TestAnekdotServiceLikes(t *testing.T) {
 	t.Run("list", func(t *testing.T) {
-		favorites := &favoriteRepositoryStub{list: []domain.Anekdot{{ID: 4}}}
-		service := NewAnekdotService(&categoryRepositoryStub{}, &anekdotRepositoryStub{}, favorites, &externalSourceStub{}, discardLogger())
+		likes := &likeRepositoryStub{list: []domain.Anekdot{{ID: 4, LikeCount: 9}}}
+		service := NewAnekdotService(&categoryRepositoryStub{}, &anekdotRepositoryStub{}, likes, &externalSourceStub{}, discardLogger())
 
-		list, err := service.Favorites(context.Background(), 9)
+		list, err := service.Likes(context.Background(), 9)
 		if err != nil {
-			t.Fatalf("Favorites() error = %v", err)
+			t.Fatalf("Likes() error = %v", err)
 		}
-		if len(list) != 1 || favorites.receivedUserID != 9 {
-			t.Errorf("Favorites() = %v, user = %d", list, favorites.receivedUserID)
+		if len(list) != 1 || list[0].LikeCount != 9 || likes.receivedUserID != 9 {
+			t.Errorf("Likes() = %v, user = %d", list, likes.receivedUserID)
+		}
+	})
+
+	t.Run("list failure", func(t *testing.T) {
+		likes := &likeRepositoryStub{listErr: errors.New("boom")}
+		service := NewAnekdotService(&categoryRepositoryStub{}, &anekdotRepositoryStub{}, likes, &externalSourceStub{}, discardLogger())
+
+		if _, err := service.Likes(context.Background(), 9); err == nil {
+			t.Fatal("Likes() error = nil, want error")
 		}
 	})
 
 	t.Run("add", func(t *testing.T) {
-		favorites := &favoriteRepositoryStub{}
-		service := NewAnekdotService(&categoryRepositoryStub{}, &anekdotRepositoryStub{}, favorites, &externalSourceStub{}, discardLogger())
+		likes := &likeRepositoryStub{}
+		service := NewAnekdotService(&categoryRepositoryStub{}, &anekdotRepositoryStub{}, likes, &externalSourceStub{}, discardLogger())
 
-		if err := service.AddFavorite(context.Background(), 9, 4); err != nil {
-			t.Fatalf("AddFavorite() error = %v", err)
+		if err := service.AddLike(context.Background(), 9, 4); err != nil {
+			t.Fatalf("AddLike() error = %v", err)
 		}
-		if len(favorites.added) != 1 || favorites.added[0] != 4 {
-			t.Errorf("added = %v, want [4]", favorites.added)
+		if len(likes.added) != 1 || likes.added[0] != 4 {
+			t.Errorf("added = %v, want [4]", likes.added)
 		}
 	})
 
 	t.Run("add rejects non-positive id", func(t *testing.T) {
-		service := NewAnekdotService(&categoryRepositoryStub{}, &anekdotRepositoryStub{}, &favoriteRepositoryStub{}, &externalSourceStub{}, discardLogger())
+		service := NewAnekdotService(&categoryRepositoryStub{}, &anekdotRepositoryStub{}, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
 
-		if err := service.AddFavorite(context.Background(), 9, 0); !errors.Is(err, domain.ErrInvalidInput) {
-			t.Fatalf("AddFavorite() error = %v, want ErrInvalidInput", err)
+		if err := service.AddLike(context.Background(), 9, 0); !errors.Is(err, domain.ErrInvalidInput) {
+			t.Fatalf("AddLike() error = %v, want ErrInvalidInput", err)
 		}
 	})
 
 	t.Run("add propagates missing anecdote", func(t *testing.T) {
 		anekdots := &anekdotRepositoryStub{byIDErr: domain.ErrNotFound}
-		service := NewAnekdotService(&categoryRepositoryStub{}, anekdots, &favoriteRepositoryStub{}, &externalSourceStub{}, discardLogger())
+		service := NewAnekdotService(&categoryRepositoryStub{}, anekdots, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
 
-		if err := service.AddFavorite(context.Background(), 9, 404); !errors.Is(err, domain.ErrNotFound) {
-			t.Fatalf("AddFavorite() error = %v, want ErrNotFound", err)
+		if err := service.AddLike(context.Background(), 9, 404); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("AddLike() error = %v, want ErrNotFound", err)
 		}
 	})
 
 	t.Run("remove", func(t *testing.T) {
-		favorites := &favoriteRepositoryStub{}
-		service := NewAnekdotService(&categoryRepositoryStub{}, &anekdotRepositoryStub{}, favorites, &externalSourceStub{}, discardLogger())
+		likes := &likeRepositoryStub{}
+		service := NewAnekdotService(&categoryRepositoryStub{}, &anekdotRepositoryStub{}, likes, &externalSourceStub{}, discardLogger())
 
-		if err := service.RemoveFavorite(context.Background(), 9, 4); err != nil {
-			t.Fatalf("RemoveFavorite() error = %v", err)
+		if err := service.RemoveLike(context.Background(), 9, 4); err != nil {
+			t.Fatalf("RemoveLike() error = %v", err)
 		}
-		if len(favorites.removed) != 1 || favorites.removed[0] != 4 {
-			t.Errorf("removed = %v, want [4]", favorites.removed)
+		if len(likes.removed) != 1 || likes.removed[0] != 4 {
+			t.Errorf("removed = %v, want [4]", likes.removed)
 		}
 	})
 
 	t.Run("remove rejects non-positive id", func(t *testing.T) {
-		service := NewAnekdotService(&categoryRepositoryStub{}, &anekdotRepositoryStub{}, &favoriteRepositoryStub{}, &externalSourceStub{}, discardLogger())
+		service := NewAnekdotService(&categoryRepositoryStub{}, &anekdotRepositoryStub{}, &likeRepositoryStub{}, &externalSourceStub{}, discardLogger())
 
-		if err := service.RemoveFavorite(context.Background(), 9, -2); !errors.Is(err, domain.ErrInvalidInput) {
-			t.Fatalf("RemoveFavorite() error = %v, want ErrInvalidInput", err)
+		if err := service.RemoveLike(context.Background(), 9, -2); !errors.Is(err, domain.ErrInvalidInput) {
+			t.Fatalf("RemoveLike() error = %v, want ErrInvalidInput", err)
 		}
 	})
 }

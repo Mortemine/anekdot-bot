@@ -26,6 +26,7 @@ type anekdotDTO struct {
 	CategoryID   int    `json:"category_id"`
 	CategoryName string `json:"category_name"`
 	Text         string `json:"text"`
+	LikeCount    int    `json:"like_count"`
 	AuthorID     *int64 `json:"author_id,omitempty"`
 }
 
@@ -85,16 +86,9 @@ func (h *AnekdotHandler) ListCategories(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *AnekdotHandler) Random(w http.ResponseWriter, r *http.Request) {
-	categoryID, filtered, err := parseCategoryID(r.URL.Query().Get("category_id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_input", "Параметр category_id должен быть неотрицательным числом.")
-
+	filter, ok := parseCategoryFilter(w, r)
+	if !ok {
 		return
-	}
-
-	var filter *int
-	if filtered {
-		filter = &categoryID
 	}
 
 	anekdot, err := h.service.Random(r.Context(), filter)
@@ -105,6 +99,34 @@ func (h *AnekdotHandler) Random(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, anekdotResponse{Anekdot: toAnekdotDTO(anekdot)})
+}
+
+func (h *AnekdotHandler) List(w http.ResponseWriter, r *http.Request) {
+	filter, ok := parseCategoryFilter(w, r)
+	if !ok {
+		return
+	}
+
+	query := r.URL.Query()
+
+	limit, ok := parsePageParam(w, query.Get("limit"))
+	if !ok {
+		return
+	}
+
+	offset, ok := parsePageParam(w, query.Get("offset"))
+	if !ok {
+		return
+	}
+
+	anekdots, err := h.service.Anekdots(r.Context(), filter, limit, offset)
+	if err != nil {
+		h.handleError(w, r, err)
+
+		return
+	}
+
+	writeJSON(w, http.StatusOK, anekdotsResponse{Anekdots: toAnekdotsDTO(anekdots)})
 }
 
 func (h *AnekdotHandler) External(w http.ResponseWriter, r *http.Request) {
@@ -197,12 +219,48 @@ func parseCategoryID(raw string) (int, bool, error) {
 	return categoryID, true, nil
 }
 
+func parseCategoryFilter(w http.ResponseWriter, r *http.Request) (*int, bool) {
+	categoryID, filtered, err := parseCategoryID(r.URL.Query().Get("category_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_input", "Параметр category_id должен быть неотрицательным числом.")
+
+		return nil, false
+	}
+
+	if !filtered {
+		return nil, true
+	}
+
+	return &categoryID, true
+}
+
+func parsePageParam(w http.ResponseWriter, raw string) (int, bool) {
+	if raw == "" {
+		return 0, true
+	}
+
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 0 {
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"invalid_input",
+			"Параметры limit и offset должны быть неотрицательными числами.",
+		)
+
+		return 0, false
+	}
+
+	return value, true
+}
+
 func toAnekdotDTO(anekdot domain.Anekdot) anekdotDTO {
 	return anekdotDTO{
 		ID:           anekdot.ID,
 		CategoryID:   anekdot.CategoryID,
 		CategoryName: anekdot.CategoryName,
 		Text:         anekdot.Text,
+		LikeCount:    anekdot.LikeCount,
 		AuthorID:     anekdot.AuthorID,
 	}
 }

@@ -12,15 +12,17 @@ import (
 )
 
 const (
-	minAnekdotLength = 10
-	maxAnekdotLength = 4000
-	userAnekdotLimit = 200
+	minAnekdotLength    = 10
+	maxAnekdotLength    = 4000
+	userAnekdotLimit    = 200
+	categoryPageSize    = 40
+	maxCategoryPageSize = 100
 )
 
 type AnekdotService struct {
 	categories domain.CategoryRepository
 	anekdots   domain.AnekdotRepository
-	favorites  domain.FavoriteRepository
+	likes      domain.LikeRepository
 	external   domain.ExternalAnekdotSource
 	logger     *slog.Logger
 }
@@ -28,14 +30,14 @@ type AnekdotService struct {
 func NewAnekdotService(
 	categories domain.CategoryRepository,
 	anekdots domain.AnekdotRepository,
-	favorites domain.FavoriteRepository,
+	likes domain.LikeRepository,
 	external domain.ExternalAnekdotSource,
 	logger *slog.Logger,
 ) *AnekdotService {
 	return &AnekdotService{
 		categories: categories,
 		anekdots:   anekdots,
-		favorites:  favorites,
+		likes:      likes,
 		external:   external,
 		logger:     logger,
 	}
@@ -63,6 +65,36 @@ func (s *AnekdotService) ListCategories(ctx context.Context) ([]domain.CategoryS
 	return summaries, nil
 }
 
+func (s *AnekdotService) Anekdots(
+	ctx context.Context,
+	categoryID *int,
+	limit, offset int,
+) ([]domain.Anekdot, error) {
+	if offset < 0 {
+		return nil, fmt.Errorf("%w: offset must not be negative", domain.ErrInvalidInput)
+	}
+
+	switch {
+	case limit <= 0:
+		limit = categoryPageSize
+	case limit > maxCategoryPageSize:
+		limit = maxCategoryPageSize
+	}
+
+	if categoryID != nil {
+		if err := s.checkCategory(ctx, *categoryID); err != nil {
+			return nil, err
+		}
+	}
+
+	anekdots, err := s.anekdots.List(ctx, categoryID, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("listing anecdotes: %w", err)
+	}
+
+	return anekdots, nil
+}
+
 func (s *AnekdotService) Random(ctx context.Context, categoryID *int) (domain.Anekdot, error) {
 	if categoryID == nil {
 		anekdot, err := s.anekdots.Random(ctx)
@@ -73,11 +105,7 @@ func (s *AnekdotService) Random(ctx context.Context, categoryID *int) (domain.An
 		return anekdot, nil
 	}
 
-	if *categoryID < 0 {
-		return domain.Anekdot{}, fmt.Errorf("%w: category_id must not be negative", domain.ErrInvalidInput)
-	}
-
-	if _, err := s.categories.Get(ctx, *categoryID); err != nil {
+	if err := s.checkCategory(ctx, *categoryID); err != nil {
 		return domain.Anekdot{}, err
 	}
 
@@ -116,11 +144,7 @@ func (s *AnekdotService) Create(
 		)
 	}
 
-	if categoryID < 0 {
-		return domain.Anekdot{}, fmt.Errorf("%w: category_id must not be negative", domain.ErrInvalidInput)
-	}
-
-	if _, err := s.categories.Get(ctx, categoryID); err != nil {
+	if err := s.checkCategory(ctx, categoryID); err != nil {
 		return domain.Anekdot{}, err
 	}
 
@@ -153,16 +177,16 @@ func (s *AnekdotService) Mine(ctx context.Context, authorID int64) ([]domain.Ane
 	return anekdots, nil
 }
 
-func (s *AnekdotService) Favorites(ctx context.Context, userID int64) ([]domain.Anekdot, error) {
-	favorites, err := s.favorites.List(ctx, userID)
+func (s *AnekdotService) Likes(ctx context.Context, userID int64) ([]domain.Anekdot, error) {
+	likes, err := s.likes.List(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("listing favorites of user %d: %w", userID, err)
+		return nil, fmt.Errorf("listing likes of user %d: %w", userID, err)
 	}
 
-	return favorites, nil
+	return likes, nil
 }
 
-func (s *AnekdotService) AddFavorite(ctx context.Context, userID, anekdotID int64) error {
+func (s *AnekdotService) AddLike(ctx context.Context, userID, anekdotID int64) error {
 	if anekdotID <= 0 {
 		return fmt.Errorf("%w: anekdot_id must be positive", domain.ErrInvalidInput)
 	}
@@ -171,21 +195,31 @@ func (s *AnekdotService) AddFavorite(ctx context.Context, userID, anekdotID int6
 		return err
 	}
 
-	if err := s.favorites.Add(ctx, userID, anekdotID); err != nil {
-		return fmt.Errorf("saving favorite: %w", err)
+	if err := s.likes.Add(ctx, userID, anekdotID); err != nil {
+		return fmt.Errorf("saving like: %w", err)
 	}
 
 	return nil
 }
 
-func (s *AnekdotService) RemoveFavorite(ctx context.Context, userID, anekdotID int64) error {
+func (s *AnekdotService) RemoveLike(ctx context.Context, userID, anekdotID int64) error {
 	if anekdotID <= 0 {
 		return fmt.Errorf("%w: anekdot_id must be positive", domain.ErrInvalidInput)
 	}
 
-	if err := s.favorites.Remove(ctx, userID, anekdotID); err != nil {
-		return fmt.Errorf("removing favorite: %w", err)
+	if err := s.likes.Remove(ctx, userID, anekdotID); err != nil {
+		return fmt.Errorf("removing like: %w", err)
 	}
 
 	return nil
+}
+
+func (s *AnekdotService) checkCategory(ctx context.Context, categoryID int) error {
+	if categoryID < 0 {
+		return fmt.Errorf("%w: category_id must not be negative", domain.ErrInvalidInput)
+	}
+
+	_, err := s.categories.Get(ctx, categoryID)
+
+	return err
 }

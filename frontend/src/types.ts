@@ -9,6 +9,7 @@ export interface Anekdot {
   category_id: number;
   category_name: string;
   text: string;
+  like_count: number;
   author_id?: number;
 }
 

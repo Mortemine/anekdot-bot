@@ -19,6 +19,7 @@ type Anekdot struct {
 	Text         string
 	AuthorID     *int64
 	CreatedAt    time.Time
+	LikeCount    int
 }
 
 type User struct {

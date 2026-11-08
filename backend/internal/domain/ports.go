@@ -14,6 +14,7 @@ type AnekdotRepository interface {
 	ByID(ctx context.Context, id int64) (Anekdot, error)
 	Create(ctx context.Context, anekdot Anekdot) (Anekdot, error)
 	ListByAuthor(ctx context.Context, authorID int64, limit int) ([]Anekdot, error)
+	List(ctx context.Context, categoryID *int, limit, offset int) ([]Anekdot, error)
 }
 
 type UserRepository interface {
@@ -28,7 +29,7 @@ type SessionRepository interface {
 	Delete(ctx context.Context, tokenHash string) error
 }
 
-type FavoriteRepository interface {
+type LikeRepository interface {
 	List(ctx context.Context, userID int64) ([]Anekdot, error)
 	Add(ctx context.Context, userID, anekdotID int64) error
 	Remove(ctx context.Context, userID, anekdotID int64) error

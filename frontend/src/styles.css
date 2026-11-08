@@ -138,6 +138,13 @@ h2 {
   outline-offset: 2px;
 }
 
+.layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
 .app-main {
   min-height: 340px;
 }
@@ -205,6 +212,82 @@ h2 {
   background: rgba(0, 0, 0, 0.18);
   font-size: 12px;
   text-align: center;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.sidebar-title {
+  margin: 0;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.sidebar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.category-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.category-button:hover {
+  background: var(--surface-raised);
+}
+
+.category-button-active {
+  border-color: var(--accent);
+  background: var(--surface-raised);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.category-button-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-button-count {
+  flex: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.category-button-active .category-button-count {
+  color: inherit;
 }
 
 .button {
@@ -391,13 +474,49 @@ h2 {
   overflow-wrap: anywhere;
 }
 
-.button-favorite {
-  margin-left: auto;
+.anekdot-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.favorite-active {
+.like-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.like-button:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.like-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.like-button-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.like-count {
+  font-variant-numeric: tabular-nums;
 }
 
 .segmented {
@@ -480,6 +599,20 @@ h2 {
   .form-inline {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar-list {
+    flex-direction: row;
+    flex-wrap: wrap;
+    max-height: none;
+  }
+
+  .category-button {
+    flex: 1 1 180px;
   }
 }
 

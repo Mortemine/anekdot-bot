@@ -15,8 +15,11 @@ import (
 
 const uniqueViolationCode = "23505"
 
+const anekdotLikeCount = `
+		(SELECT count(*) FROM likes l WHERE l.anekdot_id = a.id)::int AS like_count`
+
 const selectAnekdot = `
-	SELECT a.id, a.category_id, c.name, a.text, a.author_id, a.created_at
+	SELECT a.id, a.category_id, c.name, a.text, a.author_id, a.created_at,` + anekdotLikeCount + `
 	FROM anekdots a
 	JOIN categories c ON c.id = a.category_id`
 
@@ -106,7 +109,7 @@ func (r *AnekdotRepository) Create(ctx context.Context, anekdot domain.Anekdot) 
 		     VALUES ($1, $2, $3)
 		     RETURNING id, category_id, text, author_id, created_at
 		 )
-		 SELECT i.id, i.category_id, c.name, i.text, i.author_id, i.created_at
+		 SELECT i.id, i.category_id, c.name, i.text, i.author_id, i.created_at, 0 AS like_count
 		 FROM inserted i
 		 JOIN categories c ON c.id = i.category_id`,
 		anekdot.CategoryID,
@@ -143,13 +146,40 @@ func (r *AnekdotRepository) scanOne(ctx context.Context, query string, args ...a
 	return scanAnekdot(r.pool.QueryRow(ctx, query, args...))
 }
 
+func (r *AnekdotRepository) List(ctx context.Context, categoryID *int, limit, offset int) ([]domain.Anekdot, error) {
+	rows, err := r.pool.Query(
+		ctx,
+		selectAnekdot+`
+		WHERE ($1::int IS NULL OR a.category_id = $1)
+		ORDER BY 7 DESC, a.id DESC
+		LIMIT $2 OFFSET $3`,
+		nullableInt(categoryID),
+		limit,
+		offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("querying anecdotes: %w", err)
+	}
+	defer rows.Close()
+
+	return collectAnekdots(rows)
+}
+
 func scanAnekdot(row pgx.Row) (domain.Anekdot, error) {
 	var (
 		anekdot  domain.Anekdot
 		authorID pgtype.Int8
 	)
 
-	err := row.Scan(&anekdot.ID, &anekdot.CategoryID, &anekdot.CategoryName, &anekdot.Text, &authorID, &anekdot.CreatedAt)
+	err := row.Scan(
+		&anekdot.ID,
+		&anekdot.CategoryID,
+		&anekdot.CategoryName,
+		&anekdot.Text,
+		&authorID,
+		&anekdot.CreatedAt,
+		&anekdot.LikeCount,
+	)
 	if err != nil {
 		return domain.Anekdot{}, err
 	}
@@ -188,6 +218,14 @@ func int64Pointer(value pgtype.Int8) *int64 {
 }
 
 func nullableInt64(value *int64) any {
+	if value == nil {
+		return nil
+	}
+
+	return *value
+}
+
+func nullableInt(value *int) any {
 	if value == nil {
 		return nil
 	}

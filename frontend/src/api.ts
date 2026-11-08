@@ -108,11 +108,20 @@ export const api = {
 
   myAnekdots: () => request<{ anekdots: Anekdot[] }>("/anekdots/mine"),
 
-  listFavorites: () => request<{ anekdots: Anekdot[] }>("/favorites"),
+  listAnekdots: (categoryId: number | null, limit = 40, offset = 0) => {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (categoryId !== null) {
+      params.set("category_id", String(categoryId));
+    }
 
-  addFavorite: (anekdotId: number) => request<void>(`/favorites/${anekdotId}`, { method: "PUT" }),
+    return request<{ anekdots: Anekdot[] }>(`/anekdots?${params.toString()}`);
+  },
 
-  removeFavorite: (anekdotId: number) => request<void>(`/favorites/${anekdotId}`, { method: "DELETE" }),
+  listLikes: () => request<{ anekdots: Anekdot[] }>("/likes"),
+
+  addLike: (anekdotId: number) => request<void>(`/likes/${anekdotId}`, { method: "PUT" }),
+
+  removeLike: (anekdotId: number) => request<void>(`/likes/${anekdotId}`, { method: "DELETE" }),
 };
 
 export function errorMessage(error: unknown): string {

@@ -43,8 +43,8 @@ func New(cfg *config.Config, logger *slog.Logger) (*do.RootScope, error) {
 	do.Provide(injector, func(i do.Injector) (domain.SessionRepository, error) {
 		return postgres.NewSessionRepository(do.MustInvoke[*pgxpool.Pool](i)), nil
 	})
-	do.Provide(injector, func(i do.Injector) (domain.FavoriteRepository, error) {
-		return postgres.NewFavoriteRepository(do.MustInvoke[*pgxpool.Pool](i)), nil
+	do.Provide(injector, func(i do.Injector) (domain.LikeRepository, error) {
+		return postgres.NewLikeRepository(do.MustInvoke[*pgxpool.Pool](i)), nil
 	})
 
 	do.Provide(injector, func(i do.Injector) (domain.ExternalAnekdotSource, error) {
@@ -61,7 +61,7 @@ func New(cfg *config.Config, logger *slog.Logger) (*do.RootScope, error) {
 		return usecase.NewAnekdotService(
 			do.MustInvoke[domain.CategoryRepository](i),
 			do.MustInvoke[domain.AnekdotRepository](i),
-			do.MustInvoke[domain.FavoriteRepository](i),
+			do.MustInvoke[domain.LikeRepository](i),
 			do.MustInvoke[domain.ExternalAnekdotSource](i),
 			do.MustInvoke[*slog.Logger](i),
 		), nil

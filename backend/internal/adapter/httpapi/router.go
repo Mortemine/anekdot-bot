@@ -33,7 +33,7 @@ func NewRouter(
 	mux := http.NewServeMux()
 
 	anekdotHandler := NewAnekdotHandler(anekdotService, logger)
-	favoriteHandler := NewFavoriteHandler(anekdotService, logger)
+	likeHandler := NewLikeHandler(anekdotService, logger)
 	authHandler := NewAuthHandler(authService, logger)
 	healthHandler := NewHealthHandler(pinger, logger)
 
@@ -41,6 +41,7 @@ func NewRouter(
 
 	mux.HandleFunc("GET /api/v1/health", healthHandler.Health)
 	mux.HandleFunc("GET /api/v1/categories", anekdotHandler.ListCategories)
+	mux.HandleFunc("GET /api/v1/anekdots", anekdotHandler.List)
 	mux.HandleFunc("GET /api/v1/anekdots/random", anekdotHandler.Random)
 	mux.HandleFunc("GET /api/v1/anekdots/external", anekdotHandler.External)
 	mux.Handle("GET /api/v1/anekdots/mine", requireAuth(http.HandlerFunc(anekdotHandler.Mine)))
@@ -64,9 +65,9 @@ func NewRouter(
 		requireAuth(writeLimited(http.HandlerFunc(anekdotHandler.Create))),
 	)
 
-	mux.Handle("GET /api/v1/favorites", requireAuth(http.HandlerFunc(favoriteHandler.List)))
-	mux.Handle("PUT /api/v1/favorites/{anekdot_id}", requireAuth(http.HandlerFunc(favoriteHandler.Add)))
-	mux.Handle("DELETE /api/v1/favorites/{anekdot_id}", requireAuth(http.HandlerFunc(favoriteHandler.Remove)))
+	mux.Handle("GET /api/v1/likes", requireAuth(http.HandlerFunc(likeHandler.List)))
+	mux.Handle("PUT /api/v1/likes/{anekdot_id}", requireAuth(http.HandlerFunc(likeHandler.Add)))
+	mux.Handle("DELETE /api/v1/likes/{anekdot_id}", requireAuth(http.HandlerFunc(likeHandler.Remove)))
 
 	mux.HandleFunc("GET /api/v1/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "Эндпоинт не найден.")
