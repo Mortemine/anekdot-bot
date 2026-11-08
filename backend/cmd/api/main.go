@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/alexey/anekdot-bot/backend/internal/app"
-	"github.com/alexey/anekdot-bot/backend/internal/config"
-	"github.com/alexey/anekdot-bot/backend/internal/di"
-	"github.com/alexey/anekdot-bot/backend/internal/logging"
+	"github.com/alexey/anekdotus/backend/internal/app"
+	"github.com/alexey/anekdotus/backend/internal/config"
+	"github.com/alexey/anekdotus/backend/internal/di"
+	"github.com/alexey/anekdotus/backend/internal/logging"
 )
 
 func main() {

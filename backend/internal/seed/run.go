@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/alexey/anekdot-bot/backend/internal/domain"
+	"github.com/alexey/anekdotus/backend/internal/domain"
 )
 
 const defaultBatchSize = 500

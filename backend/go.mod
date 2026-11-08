@@ -1,4 +1,4 @@
-module github.com/alexey/anekdot-bot/backend
+module github.com/alexey/anekdotus/backend
 
 go 1.26.0
 

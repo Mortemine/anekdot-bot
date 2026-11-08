@@ -14,8 +14,8 @@ import (
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/alexey/anekdot-bot/backend/internal/config"
-	"github.com/alexey/anekdot-bot/backend/migrations"
+	"github.com/alexey/anekdotus/backend/internal/config"
+	"github.com/alexey/anekdotus/backend/migrations"
 )
 
 func main() {

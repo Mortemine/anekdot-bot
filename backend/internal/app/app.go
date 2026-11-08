@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/do/v2"
 
-	"github.com/alexey/anekdot-bot/backend/internal/config"
+	"github.com/alexey/anekdotus/backend/internal/config"
 )
 
 func Run(ctx context.Context, cfg *config.Config, injector *do.RootScope, logger *slog.Logger) error {

@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/alexey/anekdot-bot/backend/internal/domain"
-	"github.com/alexey/anekdot-bot/backend/internal/usecase"
+	"github.com/alexey/anekdotus/backend/internal/domain"
+	"github.com/alexey/anekdotus/backend/internal/usecase"
 )
 
 const (
@@ -143,10 +143,8 @@ func (h *AnekdotHandler) External(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AnekdotHandler) Create(w http.ResponseWriter, r *http.Request) {
-	user, ok := UserFromContext(r.Context())
+	user, ok := requireUser(w, r)
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "Требуется вход в аккаунт.")
-
 		return
 	}
 
@@ -166,10 +164,8 @@ func (h *AnekdotHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AnekdotHandler) Mine(w http.ResponseWriter, r *http.Request) {
-	user, ok := UserFromContext(r.Context())
+	user, ok := requireUser(w, r)
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "Требуется вход в аккаунт.")
-
 		return
 	}
 
@@ -193,17 +189,7 @@ func toAnekdotsDTO(anekdots []domain.Anekdot) []anekdotDTO {
 }
 
 func (h *AnekdotHandler) handleError(w http.ResponseWriter, r *http.Request, err error) {
-	if !isExpectedError(err) {
-		h.logger.ErrorContext(
-			r.Context(),
-			"anecdote request failed",
-			"error", err,
-			"path", r.URL.Path,
-			"request_id", requestIDFromContext(r.Context()),
-		)
-	}
-
-	writeDomainError(w, err)
+	writeRequestError(w, r, h.logger, "anecdote request failed", err)
 }
 
 func parseCategoryID(raw string) (int, bool, error) {

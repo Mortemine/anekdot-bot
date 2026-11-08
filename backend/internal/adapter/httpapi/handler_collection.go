@@ -2,13 +2,12 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
 
-	"github.com/alexey/anekdot-bot/backend/internal/domain"
-	"github.com/alexey/anekdot-bot/backend/internal/usecase"
+	"github.com/alexey/anekdotus/backend/internal/domain"
+	"github.com/alexey/anekdotus/backend/internal/usecase"
 )
 
 type anekdotCollection struct {
@@ -40,10 +39,8 @@ func NewFavoriteHandler(service *usecase.AnekdotService, logger *slog.Logger) *a
 }
 
 func (h *anekdotCollection) List(w http.ResponseWriter, r *http.Request) {
-	user, ok := UserFromContext(r.Context())
+	user, ok := requireUser(w, r)
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "Требуется вход в аккаунт.")
-
 		return
 	}
 
@@ -63,10 +60,8 @@ func (h *anekdotCollection) Add(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, ok := UserFromContext(r.Context())
+	user, ok := requireUser(w, r)
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "Требуется вход в аккаунт.")
-
 		return
 	}
 
@@ -85,10 +80,8 @@ func (h *anekdotCollection) Remove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, ok := UserFromContext(r.Context())
+	user, ok := requireUser(w, r)
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "Требуется вход в аккаунт.")
-
 		return
 	}
 
@@ -113,19 +106,5 @@ func (h *anekdotCollection) anekdotID(w http.ResponseWriter, r *http.Request) (i
 }
 
 func (h *anekdotCollection) handleError(w http.ResponseWriter, r *http.Request, err error) {
-	if !isExpectedError(err) {
-		h.logger.ErrorContext(
-			r.Context(),
-			h.resource+" request failed",
-			"error", err,
-			"path", r.URL.Path,
-			"request_id", requestIDFromContext(r.Context()),
-		)
-	}
-
-	if errors.Is(err, domain.ErrUnauthorized) {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="anekdot"`)
-	}
-
-	writeDomainError(w, err)
+	writeRequestError(w, r, h.logger, h.resource+" request failed", err)
 }

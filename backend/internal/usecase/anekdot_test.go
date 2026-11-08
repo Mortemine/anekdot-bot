@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alexey/anekdot-bot/backend/internal/domain"
+	"github.com/alexey/anekdotus/backend/internal/domain"
 )
 
 type categoryRepositoryStub struct {
@@ -89,7 +89,7 @@ func (s *anekdotRepositoryStub) ListByAuthor(
 	authorID int64,
 	limit int,
 ) ([]domain.Anekdot, error) {
-	return s.listed, nil
+	return s.listed, s.listErr
 }
 
 func (s *anekdotRepositoryStub) List(
@@ -346,6 +346,15 @@ func TestAnekdotServiceRandom(t *testing.T) {
 		service := newTestService(serviceDeps{anekdots: &anekdotRepositoryStub{byIDErr: errors.New("boom")}})
 
 		if _, err := service.Random(context.Background(), nil); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("propagates category repository error", func(t *testing.T) {
+		service := newTestService(serviceDeps{anekdots: &anekdotRepositoryStub{byIDErr: errors.New("boom")}})
+
+		categoryID := 3
+		if _, err := service.Random(context.Background(), &categoryID); err == nil {
 			t.Fatal("expected error")
 		}
 	})
@@ -634,4 +643,107 @@ func TestAnekdotServiceFavoritesAreSeparate(t *testing.T) {
 	if len(got) != 1 || got[0].ID != 5 {
 		t.Fatalf("unexpected favorites: %+v", got)
 	}
+}
+
+func TestAnekdotServiceErrorPropagation(t *testing.T) {
+	t.Run("categories repository error", func(t *testing.T) {
+		service := newTestService(serviceDeps{categories: &categoryRepositoryStub{listErr: errors.New("boom")}})
+
+		if _, err := service.ListCategories(context.Background()); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("category counts repository error", func(t *testing.T) {
+		service := newTestService(serviceDeps{anekdots: &anekdotRepositoryStub{countsErr: errors.New("boom")}})
+
+		if _, err := service.ListCategories(context.Background()); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("mine repository error", func(t *testing.T) {
+		service := newTestService(serviceDeps{anekdots: &anekdotRepositoryStub{listErr: errors.New("boom")}})
+
+		if _, err := service.Mine(context.Background(), 1); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("create rejects negative category", func(t *testing.T) {
+		service := newTestService(serviceDeps{})
+
+		categoryID := -1
+		if _, err := service.Create(context.Background(), 1, categoryID, "Очень смешной анекдот"); !errors.Is(err, domain.ErrInvalidInput) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("create storage error", func(t *testing.T) {
+		service := newTestService(serviceDeps{anekdots: &anekdotRepositoryStub{createErr: errors.New("boom")}})
+
+		if _, err := service.Create(context.Background(), 1, 0, "Очень смешной анекдот"); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("like storage error", func(t *testing.T) {
+		service := newTestService(serviceDeps{
+			anekdots: &anekdotRepositoryStub{byID: &domain.Anekdot{ID: 7}},
+			likes:    &reactionRepositoryStub{addErr: errors.New("boom")},
+		})
+
+		if err := service.AddLike(context.Background(), 1, 7); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("unlike storage error", func(t *testing.T) {
+		service := newTestService(serviceDeps{
+			anekdots: &anekdotRepositoryStub{byID: &domain.Anekdot{ID: 7}},
+			likes:    &reactionRepositoryStub{removeErr: errors.New("boom")},
+		})
+
+		if err := service.RemoveLike(context.Background(), 1, 7); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("favorite storage error", func(t *testing.T) {
+		service := newTestService(serviceDeps{
+			anekdots:  &anekdotRepositoryStub{byID: &domain.Anekdot{ID: 7}},
+			favorites: &reactionRepositoryStub{addErr: errors.New("boom")},
+		})
+
+		if err := service.AddFavorite(context.Background(), 1, 7); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("unfavorite storage error", func(t *testing.T) {
+		service := newTestService(serviceDeps{
+			anekdots:  &anekdotRepositoryStub{byID: &domain.Anekdot{ID: 7}},
+			favorites: &reactionRepositoryStub{removeErr: errors.New("boom")},
+		})
+
+		if err := service.RemoveFavorite(context.Background(), 1, 7); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("likes repository error", func(t *testing.T) {
+		service := newTestService(serviceDeps{likes: &reactionRepositoryStub{listErr: errors.New("boom")}})
+
+		if _, err := service.Likes(context.Background(), 1); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("favorites repository error", func(t *testing.T) {
+		service := newTestService(serviceDeps{favorites: &reactionRepositoryStub{listErr: errors.New("boom")}})
+
+		if _, err := service.Favorites(context.Background(), 1); err == nil {
+			t.Fatal("expected error")
+		}
+	})
 }

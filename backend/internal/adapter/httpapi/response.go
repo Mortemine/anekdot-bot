@@ -3,9 +3,10 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
-	"github.com/alexey/anekdot-bot/backend/internal/domain"
+	"github.com/alexey/anekdotus/backend/internal/domain"
 )
 
 type errorEnvelope struct {
@@ -60,4 +61,22 @@ func isExpectedError(err error) bool {
 		errors.Is(err, domain.ErrUnauthorized) ||
 		errors.Is(err, domain.ErrConflict) ||
 		errors.Is(err, domain.ErrUpstreamUnavailable)
+}
+
+func writeRequestError(w http.ResponseWriter, r *http.Request, logger *slog.Logger, message string, err error) {
+	if !isExpectedError(err) {
+		logger.ErrorContext(
+			r.Context(),
+			message,
+			"error", err,
+			"path", r.URL.Path,
+			"request_id", requestIDFromContext(r.Context()),
+		)
+	}
+
+	if errors.Is(err, domain.ErrUnauthorized) {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="anekdot"`)
+	}
+
+	writeDomainError(w, err)
 }

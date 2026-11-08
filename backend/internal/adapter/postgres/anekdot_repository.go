@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/alexey/anekdot-bot/backend/internal/domain"
+	"github.com/alexey/anekdotus/backend/internal/domain"
 )
 
 const uniqueViolationCode = "23505"
@@ -151,7 +151,7 @@ func (r *AnekdotRepository) List(ctx context.Context, categoryID *int, limit, of
 		ctx,
 		selectAnekdot+`
 		WHERE ($1::int IS NULL OR a.category_id = $1)
-		ORDER BY 7 DESC, a.id DESC
+		ORDER BY a.created_at DESC, a.id DESC
 		LIMIT $2 OFFSET $3`,
 		nullableInt(categoryID),
 		limit,

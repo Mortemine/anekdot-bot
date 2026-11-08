@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/alexey/anekdot-bot/backend/internal/domain"
+	"github.com/alexey/anekdotus/backend/internal/domain"
 )
 
 const (

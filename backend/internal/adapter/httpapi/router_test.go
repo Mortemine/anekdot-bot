@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexey/anekdot-bot/backend/internal/config"
-	"github.com/alexey/anekdot-bot/backend/internal/domain"
-	"github.com/alexey/anekdot-bot/backend/internal/usecase"
+	"github.com/alexey/anekdotus/backend/internal/config"
+	"github.com/alexey/anekdotus/backend/internal/domain"
+	"github.com/alexey/anekdotus/backend/internal/usecase"
 )
 
 type categoryStub struct {

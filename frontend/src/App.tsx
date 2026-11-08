@@ -37,60 +37,89 @@ export default function App() {
   const [favoritesError, setFavoritesError] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [busyID, setBusyID] = useState<number | null>(null);
-  const latestRequest = useRef(0);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const latestAnekdots = useRef(0);
+  const latestLikes = useRef(0);
+  const latestFavorites = useRef(0);
 
   const loadAnekdots = useCallback(async (categoryId: number | null) => {
-    latestRequest.current += 1;
-    const requestId = latestRequest.current;
+    latestAnekdots.current += 1;
+    const requestId = latestAnekdots.current;
 
     setAnekdotsLoading(true);
     setAnekdotsError(null);
 
     try {
       const payload = await api.listAnekdots(categoryId, pageSize);
-      if (requestId !== latestRequest.current) {
+      if (requestId !== latestAnekdots.current) {
         return;
       }
 
       setAnekdots(payload.anekdots);
     } catch (loadError) {
-      if (requestId !== latestRequest.current) {
+      if (requestId !== latestAnekdots.current) {
         return;
       }
 
       setAnekdotsError(errorMessage(loadError));
     } finally {
-      if (requestId === latestRequest.current) {
+      if (requestId === latestAnekdots.current) {
         setAnekdotsLoading(false);
       }
     }
   }, []);
 
   const loadLikes = useCallback(async () => {
+    latestLikes.current += 1;
+    const requestId = latestLikes.current;
+
     setLikesLoading(true);
     setLikesError(null);
 
     try {
       const payload = await api.listLikes();
+      if (requestId !== latestLikes.current) {
+        return;
+      }
+
       setLikes(payload.anekdots);
     } catch (loadError) {
+      if (requestId !== latestLikes.current) {
+        return;
+      }
+
       setLikesError(errorMessage(loadError));
     } finally {
-      setLikesLoading(false);
+      if (requestId === latestLikes.current) {
+        setLikesLoading(false);
+      }
     }
   }, []);
 
   const loadFavorites = useCallback(async () => {
+    latestFavorites.current += 1;
+    const requestId = latestFavorites.current;
+
     setFavoritesLoading(true);
     setFavoritesError(null);
 
     try {
       const payload = await api.listFavorites();
+      if (requestId !== latestFavorites.current) {
+        return;
+      }
+
       setFavorites(payload.anekdots);
     } catch (loadError) {
+      if (requestId !== latestFavorites.current) {
+        return;
+      }
+
       setFavoritesError(errorMessage(loadError));
     } finally {
-      setFavoritesLoading(false);
+      if (requestId === latestFavorites.current) {
+        setFavoritesLoading(false);
+      }
     }
   }, []);
 
@@ -155,6 +184,10 @@ export default function App() {
     void loadFavorites();
   }, [user, loadLikes, loadFavorites]);
 
+  useEffect(() => {
+    setActionError(null);
+  }, [tab]);
+
   const likedIDs = useMemo(() => new Set(likes.map((item) => item.id)), [likes]);
   const favoriteIDs = useMemo(() => new Set(favorites.map((item) => item.id)), [favorites]);
 
@@ -176,6 +209,7 @@ export default function App() {
     setUser(null);
     setLikes([]);
     setFavorites([]);
+    setActionError(null);
   }, []);
 
   const handleToggleLike = useCallback(
@@ -185,8 +219,7 @@ export default function App() {
       }
 
       setBusyID(target.id);
-      setLikesError(null);
-      setAnekdotsError(null);
+      setActionError(null);
 
       try {
         if (likedIDs.has(target.id)) {
@@ -197,7 +230,7 @@ export default function App() {
 
         await Promise.all([loadLikes(), loadAnekdots(selectedCategory)]);
       } catch (likeError) {
-        setLikesError(errorMessage(likeError));
+        setActionError(errorMessage(likeError));
       } finally {
         setBusyID(null);
       }
@@ -212,7 +245,7 @@ export default function App() {
       }
 
       setBusyID(target.id);
-      setFavoritesError(null);
+      setActionError(null);
 
       try {
         if (favoriteIDs.has(target.id)) {
@@ -223,7 +256,7 @@ export default function App() {
 
         await loadFavorites();
       } catch (favoriteError) {
-        setFavoritesError(errorMessage(favoriteError));
+        setActionError(errorMessage(favoriteError));
       } finally {
         setBusyID(null);
       }
@@ -241,7 +274,7 @@ export default function App() {
             😂
           </span>
           <div>
-            <h1>Анекдот Бот</h1>
+            <h1>anekdotus</h1>
             <p className="muted">Категории слева, анекдоты с лайками и избранным справа</p>
           </div>
         </div>
@@ -278,7 +311,7 @@ export default function App() {
               }
               anekdots={anekdots}
               loading={anekdotsLoading}
-              error={anekdotsError ?? likesError}
+              error={anekdotsError ?? actionError}
               likedIDs={likedIDs}
               favoriteIDs={favoriteIDs}
               canReact={user !== null}
@@ -305,7 +338,7 @@ export default function App() {
               emptyText="Вы пока не лайкнули ни одного анекдота."
               anekdots={likes}
               loading={likesLoading}
-              error={likesError}
+              error={likesError ?? actionError}
               likedIDs={likedIDs}
               favoriteIDs={favoriteIDs}
               busyID={busyID}
@@ -329,7 +362,7 @@ export default function App() {
               emptyText="Вы пока ничего не добавили в избранное."
               anekdots={favorites}
               loading={favoritesLoading}
-              error={favoritesError}
+              error={favoritesError ?? actionError}
               likedIDs={likedIDs}
               favoriteIDs={favoriteIDs}
               busyID={busyID}

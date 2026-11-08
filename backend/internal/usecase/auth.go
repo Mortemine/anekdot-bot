@@ -15,12 +15,12 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/alexey/anekdot-bot/backend/internal/domain"
+	"github.com/alexey/anekdotus/backend/internal/domain"
 )
 
 const (
 	minPasswordLength    = 8
-	maxPasswordLength    = 72
+	maxPasswordBytes     = 72
 	maxEmailLength       = 254
 	maxDisplayNameLength = 100
 	sessionTokenBytes    = 32
@@ -90,7 +90,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (AuthRe
 		return AuthResult{}, domain.ErrUnauthorized
 	}
 
-	if password == "" || len(password) > maxPasswordLength {
+	if password == "" || len(password) > maxPasswordBytes {
 		return AuthResult{}, domain.ErrUnauthorized
 	}
 
@@ -168,13 +168,19 @@ func normalizeEmail(raw string) (string, error) {
 }
 
 func validatePassword(password string) error {
-	length := utf8.RuneCountInString(password)
-	if length < minPasswordLength || length > maxPasswordLength {
+	if utf8.RuneCountInString(password) < minPasswordLength {
 		return fmt.Errorf(
-			"%w: password must be %d to %d characters long",
+			"%w: password must be at least %d characters long",
 			domain.ErrInvalidInput,
 			minPasswordLength,
-			maxPasswordLength,
+		)
+	}
+
+	if len(password) > maxPasswordBytes {
+		return fmt.Errorf(
+			"%w: password must be at most %d bytes long",
+			domain.ErrInvalidInput,
+			maxPasswordBytes,
 		)
 	}
 

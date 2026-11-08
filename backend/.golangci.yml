@@ -80,4 +80,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/alexey/anekdot-bot/backend
+        - github.com/alexey/anekdotus/backend

@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/alexey/anekdot-bot/backend/internal/adapter/postgres"
-	"github.com/alexey/anekdot-bot/backend/internal/config"
-	"github.com/alexey/anekdot-bot/backend/internal/logging"
-	"github.com/alexey/anekdot-bot/backend/internal/seed"
+	"github.com/alexey/anekdotus/backend/internal/adapter/postgres"
+	"github.com/alexey/anekdotus/backend/internal/config"
+	"github.com/alexey/anekdotus/backend/internal/logging"
+	"github.com/alexey/anekdotus/backend/internal/seed"
 )
 
 func main() {

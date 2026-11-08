@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/alexey/anekdot-bot/backend/internal/domain"
+	"github.com/alexey/anekdotus/backend/internal/domain"
 )
 
 const (
@@ -190,31 +190,11 @@ func (s *AnekdotService) Likes(ctx context.Context, userID int64) ([]domain.Anek
 }
 
 func (s *AnekdotService) AddLike(ctx context.Context, userID, anekdotID int64) error {
-	if anekdotID <= 0 {
-		return fmt.Errorf("%w: anekdot_id must be positive", domain.ErrInvalidInput)
-	}
-
-	if _, err := s.anekdots.ByID(ctx, anekdotID); err != nil {
-		return err
-	}
-
-	if err := s.likes.Add(ctx, userID, anekdotID); err != nil {
-		return fmt.Errorf("saving like: %w", err)
-	}
-
-	return nil
+	return s.addReaction(ctx, userID, anekdotID, "like", s.likes.Add)
 }
 
 func (s *AnekdotService) RemoveLike(ctx context.Context, userID, anekdotID int64) error {
-	if anekdotID <= 0 {
-		return fmt.Errorf("%w: anekdot_id must be positive", domain.ErrInvalidInput)
-	}
-
-	if err := s.likes.Remove(ctx, userID, anekdotID); err != nil {
-		return fmt.Errorf("removing like: %w", err)
-	}
-
-	return nil
+	return s.removeReaction(ctx, userID, anekdotID, "like", s.likes.Remove)
 }
 
 func (s *AnekdotService) Favorites(ctx context.Context, userID int64) ([]domain.Anekdot, error) {
@@ -227,28 +207,54 @@ func (s *AnekdotService) Favorites(ctx context.Context, userID int64) ([]domain.
 }
 
 func (s *AnekdotService) AddFavorite(ctx context.Context, userID, anekdotID int64) error {
-	if anekdotID <= 0 {
-		return fmt.Errorf("%w: anekdot_id must be positive", domain.ErrInvalidInput)
+	return s.addReaction(ctx, userID, anekdotID, "favorite", s.favorites.Add)
+}
+
+func (s *AnekdotService) RemoveFavorite(ctx context.Context, userID, anekdotID int64) error {
+	return s.removeReaction(ctx, userID, anekdotID, "favorite", s.favorites.Remove)
+}
+
+func (s *AnekdotService) addReaction(
+	ctx context.Context,
+	userID, anekdotID int64,
+	noun string,
+	add func(ctx context.Context, userID, anekdotID int64) error,
+) error {
+	if err := checkAnekdotID(anekdotID); err != nil {
+		return err
 	}
 
 	if _, err := s.anekdots.ByID(ctx, anekdotID); err != nil {
 		return err
 	}
 
-	if err := s.favorites.Add(ctx, userID, anekdotID); err != nil {
-		return fmt.Errorf("saving favorite: %w", err)
+	if err := add(ctx, userID, anekdotID); err != nil {
+		return fmt.Errorf("saving %s: %w", noun, err)
 	}
 
 	return nil
 }
 
-func (s *AnekdotService) RemoveFavorite(ctx context.Context, userID, anekdotID int64) error {
-	if anekdotID <= 0 {
-		return fmt.Errorf("%w: anekdot_id must be positive", domain.ErrInvalidInput)
+func (s *AnekdotService) removeReaction(
+	ctx context.Context,
+	userID, anekdotID int64,
+	noun string,
+	remove func(ctx context.Context, userID, anekdotID int64) error,
+) error {
+	if err := checkAnekdotID(anekdotID); err != nil {
+		return err
 	}
 
-	if err := s.favorites.Remove(ctx, userID, anekdotID); err != nil {
-		return fmt.Errorf("removing favorite: %w", err)
+	if err := remove(ctx, userID, anekdotID); err != nil {
+		return fmt.Errorf("removing %s: %w", noun, err)
+	}
+
+	return nil
+}
+
+func checkAnekdotID(anekdotID int64) error {
+	if anekdotID <= 0 {
+		return fmt.Errorf("%w: anekdot_id must be positive", domain.ErrInvalidInput)
 	}
 
 	return nil

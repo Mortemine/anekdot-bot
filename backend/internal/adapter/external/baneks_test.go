@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexey/anekdot-bot/backend/internal/domain"
+	"github.com/alexey/anekdotus/backend/internal/domain"
 )
 
 func discardLogger() *slog.Logger {

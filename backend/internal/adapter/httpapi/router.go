@@ -12,8 +12,8 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"github.com/alexey/anekdot-bot/backend/internal/config"
-	"github.com/alexey/anekdot-bot/backend/internal/usecase"
+	"github.com/alexey/anekdotus/backend/internal/config"
+	"github.com/alexey/anekdotus/backend/internal/usecase"
 )
 
 const (

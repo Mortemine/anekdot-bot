@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/alexey/anekdot-bot/backend/internal/config"
+	"github.com/alexey/anekdotus/backend/internal/config"
 )
 
 const pingTimeout = 5 * time.Second

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alexey/anekdot-bot/backend/internal/config"
+	"github.com/alexey/anekdotus/backend/internal/config"
 )
 
 const (

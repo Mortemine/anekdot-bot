@@ -16,8 +16,8 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"github.com/alexey/anekdot-bot/backend/internal/domain"
-	"github.com/alexey/anekdot-bot/backend/internal/usecase"
+	"github.com/alexey/anekdotus/backend/internal/domain"
+	"github.com/alexey/anekdotus/backend/internal/usecase"
 )
 
 type contextKey string
@@ -227,6 +227,17 @@ func UserFromContext(ctx context.Context) (domain.User, bool) {
 	user, ok := ctx.Value(userContextKey{}).(domain.User)
 
 	return user, ok
+}
+
+func requireUser(w http.ResponseWriter, r *http.Request) (domain.User, bool) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "Требуется вход в аккаунт.")
+
+		return domain.User{}, false
+	}
+
+	return user, true
 }
 
 func bearerToken(r *http.Request) string {

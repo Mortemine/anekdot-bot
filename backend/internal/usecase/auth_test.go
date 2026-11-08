@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexey/anekdot-bot/backend/internal/domain"
+	"golang.org/x/crypto/bcrypt"
+
+	"github.com/alexey/anekdotus/backend/internal/domain"
 )
 
 type userRepositoryStub struct {
@@ -165,7 +167,8 @@ func TestAuthServiceRegisterRejects(t *testing.T) {
 		{name: "empty email", email: "", password: "password123"},
 		{name: "malformed email", email: "not-an-email", password: "password123"},
 		{name: "short password", email: "reader@example.com", password: "short"},
-		{name: "long password", email: "reader@example.com", password: strings.Repeat("a", maxPasswordLength+1)},
+		{name: "long password", email: "reader@example.com", password: strings.Repeat("a", maxPasswordBytes+1)},
+		{name: "long multibyte password", email: "reader@example.com", password: strings.Repeat("я", 40)},
 		{
 			name:        "long display name",
 			email:       "reader@example.com",
@@ -195,6 +198,15 @@ func TestAuthServiceRegisterRejects(t *testing.T) {
 			t.Fatalf("second Register() error = %v, want ErrConflict", err)
 		}
 	})
+}
+
+func TestAuthServiceRegisterMultibytePassword(t *testing.T) {
+	service, _, _ := newAuthFixture()
+	password := strings.Repeat("я", 24)
+
+	if _, err := service.Register(context.Background(), "reader@example.com", password, ""); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
 }
 
 func TestAuthServiceLogin(t *testing.T) {
@@ -301,6 +313,84 @@ func TestAuthServiceLogout(t *testing.T) {
 	t.Run("unknown token is not an error", func(t *testing.T) {
 		if err := service.Logout(context.Background(), "   "); err != nil {
 			t.Fatalf("Logout() error = %v", err)
+		}
+	})
+}
+
+func TestAuthServiceStorageErrors(t *testing.T) {
+	t.Run("register duplicate email", func(t *testing.T) {
+		service, _, _ := newAuthFixture()
+
+		if _, err := service.Register(context.Background(), "reader@example.com", "password123", ""); err != nil {
+			t.Fatalf("Register() error = %v", err)
+		}
+
+		_, err := service.Register(context.Background(), "reader@example.com", "password123", "")
+		if !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("Register() error = %v, want ErrConflict", err)
+		}
+	})
+
+	t.Run("register user repository error", func(t *testing.T) {
+		service, users, _ := newAuthFixture()
+		users.createErr = errors.New("boom")
+
+		if _, err := service.Register(context.Background(), "reader@example.com", "password123", ""); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("register session repository error", func(t *testing.T) {
+		service, _, sessions := newAuthFixture()
+		sessions.createErr = errors.New("boom")
+
+		if _, err := service.Register(context.Background(), "reader@example.com", "password123", ""); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("login user repository error", func(t *testing.T) {
+		service, users, _ := newAuthFixture()
+		users.lookupErr = errors.New("boom")
+
+		if _, err := service.Login(context.Background(), "reader@example.com", "password123"); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("login session repository error", func(t *testing.T) {
+		service, users, sessions := newAuthFixture()
+
+		hash, err := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.MinCost)
+		if err != nil {
+			t.Fatalf("hashing password: %v", err)
+		}
+
+		user := domain.User{ID: 1, Email: "reader@example.com", DisplayName: "reader"}
+		users.byEmail[user.Email] = domain.Credentials{User: user, PasswordHash: string(hash)}
+		users.byID[user.ID] = user
+		sessions.createErr = errors.New("boom")
+
+		if _, err := service.Login(context.Background(), "reader@example.com", "password123"); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("authenticate session repository error", func(t *testing.T) {
+		service, _, sessions := newAuthFixture()
+		sessions.lookupErr = errors.New("boom")
+
+		if _, err := service.Authenticate(context.Background(), "token"); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("logout delete error", func(t *testing.T) {
+		service, _, sessions := newAuthFixture()
+		sessions.deleteErr = errors.New("boom")
+
+		if err := service.Logout(context.Background(), "token"); err == nil {
+			t.Fatal("expected error")
 		}
 	})
 }

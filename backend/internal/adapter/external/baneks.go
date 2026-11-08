@@ -14,12 +14,12 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 
-	"github.com/alexey/anekdot-bot/backend/internal/domain"
+	"github.com/alexey/anekdotus/backend/internal/domain"
 )
 
 const (
 	maxResponseBytes = 1 << 20
-	userAgent        = "anekdot-bot/1.0"
+	userAgent        = "anekdotus/1.0"
 
 	dialTimeout         = 5 * time.Second
 	keepAlive           = 30 * time.Second

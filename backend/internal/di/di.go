@@ -9,12 +9,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/do/v2"
 
-	"github.com/alexey/anekdot-bot/backend/internal/adapter/external"
-	"github.com/alexey/anekdot-bot/backend/internal/adapter/httpapi"
-	"github.com/alexey/anekdot-bot/backend/internal/adapter/postgres"
-	"github.com/alexey/anekdot-bot/backend/internal/config"
-	"github.com/alexey/anekdot-bot/backend/internal/domain"
-	"github.com/alexey/anekdot-bot/backend/internal/usecase"
+	"github.com/alexey/anekdotus/backend/internal/adapter/external"
+	"github.com/alexey/anekdotus/backend/internal/adapter/httpapi"
+	"github.com/alexey/anekdotus/backend/internal/adapter/postgres"
+	"github.com/alexey/anekdotus/backend/internal/config"
+	"github.com/alexey/anekdotus/backend/internal/domain"
+	"github.com/alexey/anekdotus/backend/internal/usecase"
 )
 
 func New(cfg *config.Config, logger *slog.Logger) (*do.RootScope, error) {

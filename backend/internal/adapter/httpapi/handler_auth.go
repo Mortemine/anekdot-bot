@@ -1,13 +1,12 @@
 package httpapi
 
 import (
-	"errors"
 	"log/slog"
 	"net/http"
 	"time"
 
-	"github.com/alexey/anekdot-bot/backend/internal/domain"
-	"github.com/alexey/anekdot-bot/backend/internal/usecase"
+	"github.com/alexey/anekdotus/backend/internal/domain"
+	"github.com/alexey/anekdotus/backend/internal/usecase"
 )
 
 const maxAuthBodyBytes = 8 << 10
@@ -92,10 +91,8 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
-	user, ok := UserFromContext(r.Context())
+	user, ok := requireUser(w, r)
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "Требуется вход в аккаунт.")
-
 		return
 	}
 
@@ -103,21 +100,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) handleError(w http.ResponseWriter, r *http.Request, err error) {
-	if !isExpectedError(err) {
-		h.logger.ErrorContext(
-			r.Context(),
-			"authentication request failed",
-			"error", err,
-			"path", r.URL.Path,
-			"request_id", requestIDFromContext(r.Context()),
-		)
-	}
-
-	if errors.Is(err, domain.ErrUnauthorized) {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="anekdot"`)
-	}
-
-	writeDomainError(w, err)
+	writeRequestError(w, r, h.logger, "authentication request failed", err)
 }
 
 func toAuthResponse(result usecase.AuthResult) authResponse {
