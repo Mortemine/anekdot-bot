@@ -1,4 +1,3 @@
-// Package config loads application settings from environment variables.
 package config
 
 import (
@@ -13,8 +12,7 @@ import (
 )
 
 const (
-	defaultHTTPAddr = ":8080"
-	//nolint:gosec // local development default, always overridable by DATABASE_URL.
+	defaultHTTPAddr        = ":8080"
 	defaultDatabaseURL     = "postgres://anekdot:anekdot@localhost:5432/anekdot?sslmode=disable"
 	defaultExternalURL     = "https://baneks.site/random"
 	defaultCORSOrigins     = "http://localhost:5173"
@@ -29,7 +27,6 @@ const (
 	defaultDBMaxConnIdle       = 5 * time.Minute
 )
 
-// Config holds every runtime setting of the application.
 type Config struct {
 	HTTPAddr           string
 	DatabaseURL        string
@@ -49,7 +46,6 @@ type Config struct {
 	ShutdownTimeout    time.Duration
 }
 
-// Load reads configuration from the environment and validates it.
 func Load() (*Config, error) {
 	cfg := &Config{
 		HTTPAddr:           env("HTTP_ADDR", defaultHTTPAddr),

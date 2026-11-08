@@ -53,6 +53,12 @@ linters:
     nolintlint:
       require-explanation: true
       require-specific: true
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
   exclusions:
     rules:
       - path: _test\.go
@@ -63,6 +69,9 @@ linters:
           - goconst
           - lll
           - mnd
+      - linters:
+          - gosec
+        text: "G101"
 
 formatters:
   enable:

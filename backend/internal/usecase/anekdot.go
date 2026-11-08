@@ -1,4 +1,3 @@
-// Package usecase implements the application business rules.
 package usecase
 
 import (
@@ -15,11 +14,9 @@ import (
 const (
 	minAnekdotLength = 10
 	maxAnekdotLength = 4000
-	// userAnekdotLimit caps the "my anecdotes" listing.
 	userAnekdotLimit = 200
 )
 
-// AnekdotService serves category and anecdote use cases.
 type AnekdotService struct {
 	categories domain.CategoryRepository
 	anekdots   domain.AnekdotRepository
@@ -28,7 +25,6 @@ type AnekdotService struct {
 	logger     *slog.Logger
 }
 
-// NewAnekdotService wires the anecdote use case with its ports.
 func NewAnekdotService(
 	categories domain.CategoryRepository,
 	anekdots domain.AnekdotRepository,
@@ -45,7 +41,6 @@ func NewAnekdotService(
 	}
 }
 
-// ListCategories returns every category with its anecdote count.
 func (s *AnekdotService) ListCategories(ctx context.Context) ([]domain.CategorySummary, error) {
 	categories, err := s.categories.List(ctx)
 	if err != nil {
@@ -68,7 +63,6 @@ func (s *AnekdotService) ListCategories(ctx context.Context) ([]domain.CategoryS
 	return summaries, nil
 }
 
-// Random returns a random anecdote, optionally filtered by category.
 func (s *AnekdotService) Random(ctx context.Context, categoryID *int) (domain.Anekdot, error) {
 	if categoryID == nil {
 		anekdot, err := s.anekdots.Random(ctx)
@@ -79,7 +73,6 @@ func (s *AnekdotService) Random(ctx context.Context, categoryID *int) (domain.An
 		return anekdot, nil
 	}
 
-	// Category 0 exists in the archive as "Вне категорий", so only negative ids are rejected.
 	if *categoryID < 0 {
 		return domain.Anekdot{}, fmt.Errorf("%w: category_id must not be negative", domain.ErrInvalidInput)
 	}
@@ -96,7 +89,6 @@ func (s *AnekdotService) Random(ctx context.Context, categoryID *int) (domain.An
 	return anekdot, nil
 }
 
-// External fetches a fresh anecdote from the external provider.
 func (s *AnekdotService) External(ctx context.Context) (string, error) {
 	text, err := s.external.Random(ctx)
 	if err != nil {
@@ -106,7 +98,6 @@ func (s *AnekdotService) External(ctx context.Context) (string, error) {
 	return text, nil
 }
 
-// Create stores an anecdote submitted by a registered user.
 func (s *AnekdotService) Create(
 	ctx context.Context,
 	authorID int64,
@@ -125,7 +116,6 @@ func (s *AnekdotService) Create(
 		)
 	}
 
-	// Category 0 exists in the archive as "Вне категорий", so only negative ids are rejected.
 	if categoryID < 0 {
 		return domain.Anekdot{}, fmt.Errorf("%w: category_id must not be negative", domain.ErrInvalidInput)
 	}
@@ -154,7 +144,6 @@ func (s *AnekdotService) Create(
 	return created, nil
 }
 
-// Mine returns the anecdotes submitted by one user.
 func (s *AnekdotService) Mine(ctx context.Context, authorID int64) ([]domain.Anekdot, error) {
 	anekdots, err := s.anekdots.ListByAuthor(ctx, authorID, userAnekdotLimit)
 	if err != nil {
@@ -164,7 +153,6 @@ func (s *AnekdotService) Mine(ctx context.Context, authorID int64) ([]domain.Ane
 	return anekdots, nil
 }
 
-// Favorites returns the anecdotes a user has saved.
 func (s *AnekdotService) Favorites(ctx context.Context, userID int64) ([]domain.Anekdot, error) {
 	favorites, err := s.favorites.List(ctx, userID)
 	if err != nil {
@@ -174,7 +162,6 @@ func (s *AnekdotService) Favorites(ctx context.Context, userID int64) ([]domain.
 	return favorites, nil
 }
 
-// AddFavorite saves an anecdote for a user.
 func (s *AnekdotService) AddFavorite(ctx context.Context, userID, anekdotID int64) error {
 	if anekdotID <= 0 {
 		return fmt.Errorf("%w: anekdot_id must be positive", domain.ErrInvalidInput)
@@ -191,7 +178,6 @@ func (s *AnekdotService) AddFavorite(ctx context.Context, userID, anekdotID int6
 	return nil
 }
 
-// RemoveFavorite drops one saved anecdote.
 func (s *AnekdotService) RemoveFavorite(ctx context.Context, userID, anekdotID int64) error {
 	if anekdotID <= 0 {
 		return fmt.Errorf("%w: anekdot_id must be positive", domain.ErrInvalidInput)

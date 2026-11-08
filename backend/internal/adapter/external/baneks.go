@@ -1,4 +1,3 @@
-// Package external fetches anecdotes from third-party providers.
 package external
 
 import (
@@ -19,7 +18,7 @@ import (
 )
 
 const (
-	maxResponseBytes = 1 << 20 // 1 MiB
+	maxResponseBytes = 1 << 20
 	userAgent        = "anekdot-bot/1.0"
 
 	dialTimeout         = 5 * time.Second
@@ -30,14 +29,12 @@ const (
 	tlsHandshakeTimeout = 5 * time.Second
 )
 
-// BaneksSource reads a random anecdote from baneks.site.
 type BaneksSource struct {
 	url    string
 	client *http.Client
 	logger *slog.Logger
 }
 
-// NewBaneksSource validates the provider URL and builds an HTTP client.
 func NewBaneksSource(rawURL string, timeout time.Duration, logger *slog.Logger) (*BaneksSource, error) {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
@@ -68,7 +65,6 @@ func NewBaneksSource(rawURL string, timeout time.Duration, logger *slog.Logger) 
 	}, nil
 }
 
-// Random fetches and extracts a single random anecdote.
 func (s *BaneksSource) Random(ctx context.Context) (string, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, s.url, nil)
 	if err != nil {

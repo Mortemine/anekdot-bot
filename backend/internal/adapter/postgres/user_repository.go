@@ -11,17 +11,14 @@ import (
 	"github.com/alexey/anekdot-bot/backend/internal/domain"
 )
 
-// UserRepository stores registered users in PostgreSQL.
 type UserRepository struct {
 	pool *pgxpool.Pool
 }
 
-// NewUserRepository returns a PostgreSQL backed user repository.
 func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 	return &UserRepository{pool: pool}
 }
 
-// Create inserts a user and returns the stored row.
 func (r *UserRepository) Create(
 	ctx context.Context,
 	email, displayName, passwordHash string,
@@ -48,7 +45,6 @@ func (r *UserRepository) Create(
 	return user, nil
 }
 
-// ByEmail returns the credentials of a user by email address.
 func (r *UserRepository) ByEmail(ctx context.Context, email string) (domain.Credentials, error) {
 	var credentials domain.Credentials
 
@@ -76,7 +72,6 @@ func (r *UserRepository) ByEmail(ctx context.Context, email string) (domain.Cred
 	return credentials, nil
 }
 
-// ByID returns a user by identifier.
 func (r *UserRepository) ByID(ctx context.Context, id int64) (domain.User, error) {
 	var user domain.User
 

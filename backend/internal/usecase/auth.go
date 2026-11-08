@@ -19,25 +19,20 @@ import (
 )
 
 const (
-	minPasswordLength = 8
-	// bcrypt silently ignores everything past 72 bytes, so longer passwords
-	// are rejected instead of being truncated behind the user's back.
+	minPasswordLength    = 8
 	maxPasswordLength    = 72
 	maxEmailLength       = 254
 	maxDisplayNameLength = 100
 	sessionTokenBytes    = 32
-	// passwordHashCost is the bcrypt work factor used for new passwords.
-	passwordHashCost = 12
+	passwordHashCost     = 12
 )
 
-// AuthResult is a user together with the session issued for it.
 type AuthResult struct {
 	User      domain.User
 	Token     string
 	ExpiresAt time.Time
 }
 
-// AuthService registers users, signs them in and resolves session tokens.
 type AuthService struct {
 	users      domain.UserRepository
 	sessions   domain.SessionRepository
@@ -45,7 +40,6 @@ type AuthService struct {
 	logger     *slog.Logger
 }
 
-// NewAuthService wires the authentication use case with its ports.
 func NewAuthService(
 	users domain.UserRepository,
 	sessions domain.SessionRepository,
@@ -60,7 +54,6 @@ func NewAuthService(
 	}
 }
 
-// Register creates an account and immediately signs the user in.
 func (s *AuthService) Register(ctx context.Context, email, password, displayName string) (AuthResult, error) {
 	normalizedEmail, err := normalizeEmail(email)
 	if err != nil {
@@ -91,9 +84,6 @@ func (s *AuthService) Register(ctx context.Context, email, password, displayName
 	return s.startSession(ctx, user)
 }
 
-// Login verifies the credentials and issues a session.
-//
-// Every failure yields ErrUnauthorized so callers cannot enumerate accounts.
 func (s *AuthService) Login(ctx context.Context, email, password string) (AuthResult, error) {
 	normalizedEmail, err := normalizeEmail(email)
 	if err != nil {
@@ -120,7 +110,6 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (AuthRe
 	return s.startSession(ctx, credentials.User)
 }
 
-// Authenticate resolves a bearer token to its user.
 func (s *AuthService) Authenticate(ctx context.Context, token string) (domain.User, error) {
 	tokenHash, err := hashSessionToken(token)
 	if err != nil {
@@ -139,7 +128,6 @@ func (s *AuthService) Authenticate(ctx context.Context, token string) (domain.Us
 	return user, nil
 }
 
-// Logout revokes a single session. Revoking an unknown token is not an error.
 func (s *AuthService) Logout(ctx context.Context, token string) error {
 	trimmed := strings.TrimSpace(token)
 	if trimmed == "" {

@@ -6,10 +6,6 @@ import (
 	"net/http"
 )
 
-// decodeRequest decodes a size limited JSON body into target.
-//
-// It writes the error response itself and returns false when the body cannot be
-// used, so callers only need to return on false.
 func decodeRequest(w http.ResponseWriter, r *http.Request, limit int64, target any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
 

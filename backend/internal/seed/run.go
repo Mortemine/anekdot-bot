@@ -14,15 +14,12 @@ import (
 
 const defaultBatchSize = 500
 
-// Stats summarizes a completed import.
 type Stats struct {
 	Categories int
 	Anekdots   int
 	Skipped    int
 }
 
-// Run imports categories and anecdotes from dataDir. The import is idempotent:
-// categories are upserted and duplicates are ignored by a unique index.
 func Run(ctx context.Context, pool *pgxpool.Pool, dataDir string, logger *slog.Logger) (Stats, error) {
 	categories, err := readCategories(dataDir)
 	if err != nil {

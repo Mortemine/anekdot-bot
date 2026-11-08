@@ -1,21 +1,16 @@
-# Build output
 backend/bin/
 backend/web/
 frontend/dist/
 
-# Node
 frontend/node_modules/
 frontend/npm-debug.log*
 
-# Go
 *.test
 *.out
 
-# Local environment
 .env
 .env.local
 
-# Editors / OS
 .DS_Store
 .idea/
 .vscode/

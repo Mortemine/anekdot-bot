@@ -15,7 +15,6 @@ const (
 	serverMaxHeaderBytes    = 1 << 20
 )
 
-// NewServer builds an HTTP server with production-safe timeouts.
 func NewServer(cfg *config.Config, handler http.Handler) *http.Server {
 	return &http.Server{
 		Addr:              cfg.HTTPAddr,

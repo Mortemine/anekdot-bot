@@ -40,18 +40,15 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
-// AuthHandler exposes registration, login and session endpoints.
 type AuthHandler struct {
 	service *usecase.AuthService
 	logger  *slog.Logger
 }
 
-// NewAuthHandler builds the authentication HTTP handler.
 func NewAuthHandler(service *usecase.AuthService, logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{service: service, logger: logger}
 }
 
-// Register handles POST /api/v1/auth/register.
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var payload registerRequest
 	if !decodeRequest(w, r, maxAuthBodyBytes, &payload) {
@@ -68,7 +65,6 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, toAuthResponse(result))
 }
 
-// Login handles POST /api/v1/auth/login.
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var payload loginRequest
 	if !decodeRequest(w, r, maxAuthBodyBytes, &payload) {
@@ -85,7 +81,6 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toAuthResponse(result))
 }
 
-// Logout handles POST /api/v1/auth/logout.
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.Logout(r.Context(), bearerToken(r)); err != nil {
 		h.handleError(w, r, err)
@@ -96,10 +91,6 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Me handles GET /api/v1/auth/me.
-//
-// The authentication middleware has already resolved the user, so a missing
-// user here means the route was wired without it.
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {

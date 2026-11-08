@@ -1,4 +1,3 @@
-// Command migrate applies PostgreSQL migrations embedded in the binary.
 package main
 
 import (

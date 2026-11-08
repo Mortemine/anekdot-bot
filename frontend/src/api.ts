@@ -39,7 +39,7 @@ export function setToken(token: string | null): void {
 
     window.localStorage.setItem(tokenKey, token);
   } catch {
-    // Storage can be unavailable (private mode); the session then lasts for the page only.
+    return;
   }
 }
 

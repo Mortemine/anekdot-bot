@@ -25,8 +25,6 @@ type contextKey string
 const (
 	requestIDContextKey contextKey = "request_id"
 
-	// ipRateLimiter keeps at most maxTrackedClients buckets and drops idle ones
-	// after limiterEntryTTL so memory stays bounded under abusive traffic.
 	limiterEntryTTL   = 10 * time.Minute
 	maxTrackedClients = 10_000
 )
@@ -37,7 +35,6 @@ func requestIDFromContext(ctx context.Context) string {
 	return requestID
 }
 
-// chain applies middleware so that the first argument is the outermost layer.
 func chain(handler http.Handler, middleware ...func(http.Handler) http.Handler) http.Handler {
 	for index := len(middleware) - 1; index >= 0; index-- {
 		handler = middleware[index](handler)
@@ -79,7 +76,7 @@ func recovererMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 				if recovered == nil {
 					return
 				}
-				if recovered == http.ErrAbortHandler { //nolint:errorlint // panic value is compared by design
+				if err, ok := recovered.(error); ok && errors.Is(err, http.ErrAbortHandler) {
 					panic(recovered)
 				}
 
@@ -226,14 +223,12 @@ func corsMiddleware(origins []string) func(http.Handler) http.Handler {
 
 type userContextKey struct{}
 
-// UserFromContext returns the user attached by authMiddleware.
 func UserFromContext(ctx context.Context) (domain.User, bool) {
 	user, ok := ctx.Value(userContextKey{}).(domain.User)
 
 	return user, ok
 }
 
-// bearerToken extracts the token from the Authorization header.
 func bearerToken(r *http.Request) string {
 	const prefix = "bearer "
 
@@ -245,7 +240,6 @@ func bearerToken(r *http.Request) string {
 	return strings.TrimSpace(header[len(prefix):])
 }
 
-// authMiddleware resolves the session token and attaches the user to the request.
 func authMiddleware(service *usecase.AuthService, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

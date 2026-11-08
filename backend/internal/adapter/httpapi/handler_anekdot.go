@@ -50,24 +50,20 @@ type externalAnekdotResponse struct {
 	Anekdot externalAnekdotDTO `json:"anekdot"`
 }
 
-// createAnekdotRequest is the body of POST /api/v1/anekdots.
 type createAnekdotRequest struct {
 	CategoryID int    `json:"category_id"`
 	Text       string `json:"text"`
 }
 
-// AnekdotHandler exposes category and anecdote endpoints.
 type AnekdotHandler struct {
 	service *usecase.AnekdotService
 	logger  *slog.Logger
 }
 
-// NewAnekdotHandler builds the anecdote HTTP handler.
 func NewAnekdotHandler(service *usecase.AnekdotService, logger *slog.Logger) *AnekdotHandler {
 	return &AnekdotHandler{service: service, logger: logger}
 }
 
-// ListCategories handles GET /api/v1/categories.
 func (h *AnekdotHandler) ListCategories(w http.ResponseWriter, r *http.Request) {
 	summaries, err := h.service.ListCategories(r.Context())
 	if err != nil {
@@ -88,7 +84,6 @@ func (h *AnekdotHandler) ListCategories(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, categoriesResponse{Categories: categories})
 }
 
-// Random handles GET /api/v1/anekdots/random.
 func (h *AnekdotHandler) Random(w http.ResponseWriter, r *http.Request) {
 	categoryID, filtered, err := parseCategoryID(r.URL.Query().Get("category_id"))
 	if err != nil {
@@ -112,7 +107,6 @@ func (h *AnekdotHandler) Random(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, anekdotResponse{Anekdot: toAnekdotDTO(anekdot)})
 }
 
-// External handles GET /api/v1/anekdots/external.
 func (h *AnekdotHandler) External(w http.ResponseWriter, r *http.Request) {
 	text, err := h.service.External(r.Context())
 	if err != nil {
@@ -126,7 +120,6 @@ func (h *AnekdotHandler) External(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Create handles POST /api/v1/anekdots.
 func (h *AnekdotHandler) Create(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
@@ -150,7 +143,6 @@ func (h *AnekdotHandler) Create(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, anekdotResponse{Anekdot: toAnekdotDTO(created)})
 }
 
-// Mine handles GET /api/v1/anekdots/mine.
 func (h *AnekdotHandler) Mine(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
@@ -192,7 +184,6 @@ func (h *AnekdotHandler) handleError(w http.ResponseWriter, r *http.Request, err
 	writeDomainError(w, err)
 }
 
-// parseCategoryID parses the optional category_id query parameter.
 func parseCategoryID(raw string) (int, bool, error) {
 	if raw == "" {
 		return 0, false, nil

@@ -10,18 +10,15 @@ import (
 	"github.com/alexey/anekdot-bot/backend/internal/usecase"
 )
 
-// FavoriteHandler exposes the saved anecdote endpoints.
 type FavoriteHandler struct {
 	service *usecase.AnekdotService
 	logger  *slog.Logger
 }
 
-// NewFavoriteHandler builds the favorites HTTP handler.
 func NewFavoriteHandler(service *usecase.AnekdotService, logger *slog.Logger) *FavoriteHandler {
 	return &FavoriteHandler{service: service, logger: logger}
 }
 
-// List handles GET /api/v1/favorites.
 func (h *FavoriteHandler) List(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
@@ -40,7 +37,6 @@ func (h *FavoriteHandler) List(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, anekdotsResponse{Anekdots: toAnekdotsDTO(favorites)})
 }
 
-// Add handles PUT /api/v1/favorites/{anekdot_id}.
 func (h *FavoriteHandler) Add(w http.ResponseWriter, r *http.Request) {
 	anekdotID, ok := h.anekdotID(w, r)
 	if !ok {
@@ -63,7 +59,6 @@ func (h *FavoriteHandler) Add(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Remove handles DELETE /api/v1/favorites/{anekdot_id}.
 func (h *FavoriteHandler) Remove(w http.ResponseWriter, r *http.Request) {
 	anekdotID, ok := h.anekdotID(w, r)
 	if !ok {

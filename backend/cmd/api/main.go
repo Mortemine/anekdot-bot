@@ -1,4 +1,3 @@
-// Command api runs the web API server.
 package main
 
 import (

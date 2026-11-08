@@ -1,4 +1,3 @@
-// Package postgres implements the driven storage ports with PostgreSQL.
 package postgres
 
 import (
@@ -14,7 +13,6 @@ import (
 
 const pingTimeout = 5 * time.Second
 
-// NewPool creates and verifies a PostgreSQL connection pool.
 func NewPool(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*pgxpool.Pool, error) {
 	poolConfig, err := pgxpool.ParseConfig(cfg.DatabaseURL)
 	if err != nil {

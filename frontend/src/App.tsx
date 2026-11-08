@@ -136,11 +136,7 @@ export default function App() {
   }, []);
 
   const handleLogout = useCallback(async () => {
-    try {
-      await api.logout();
-    } catch {
-      // The session is dropped locally even if the server already forgot it.
-    }
+    await api.logout().catch(() => undefined);
 
     setToken(null);
     setUser(null);

@@ -1,4 +1,3 @@
-// Package di wires every layer of the application.
 package di
 
 import (
@@ -18,7 +17,6 @@ import (
 	"github.com/alexey/anekdot-bot/backend/internal/usecase"
 )
 
-// New builds the dependency injection container and eagerly validates the graph.
 func New(cfg *config.Config, logger *slog.Logger) (*do.RootScope, error) {
 	injector := do.New()
 

@@ -1,4 +1,3 @@
-// Package httpapi implements the driving HTTP adapter.
 package httpapi
 
 import (
@@ -18,14 +17,12 @@ import (
 )
 
 const (
-	// Rate limits protect the endpoints that cost CPU (bcrypt) or write rows.
 	authRateWindow  = time.Minute
 	authRateBurst   = 10
 	writeRateWindow = time.Minute
 	writeRateBurst  = 10
 )
 
-// NewRouter builds the HTTP handler tree with all middleware applied.
 func NewRouter(
 	cfg *config.Config,
 	logger *slog.Logger,

@@ -1,4 +1,3 @@
-// Package seed imports the legacy text dumps into PostgreSQL.
 package seed
 
 import (
@@ -20,20 +19,17 @@ const (
 	initialScanBufferBytes    = 64 * 1024
 )
 
-// Anekdot is a parsed row from the legacy dump.
 type Anekdot struct {
 	CategoryID int
 	Text       string
 }
 
-// ParseStats describes the outcome of parsing the anecdote dump.
 type ParseStats struct {
 	Total    int
 	Imported int
 	Skipped  int
 }
 
-// ParseCategories reads lines of the form "id, Name".
 func ParseCategories(reader io.Reader) ([]domain.Category, error) {
 	scanner := newScanner(reader)
 
@@ -69,9 +65,6 @@ func ParseCategories(reader io.Reader) ([]domain.Category, error) {
 	return categories, nil
 }
 
-// ParseAnekdots reads lines of the form " id, text" and keeps rows whose
-// category exists. Malformed rows are reported through ParseStats instead of
-// aborting the import, because the legacy dump contains damaged lines.
 func ParseAnekdots(reader io.Reader, knownCategories map[int]struct{}) ([]Anekdot, ParseStats, error) {
 	scanner := newScanner(reader)
 
@@ -146,8 +139,6 @@ func parseCategoryLine(line string) (domain.Category, error) {
 	return domain.Category{ID: id, Name: name}, nil
 }
 
-// normalizeText turns the literal "\n" sequences of the dump into real line
-// breaks and decodes HTML entities left by the legacy scraper.
 func normalizeText(text string) string {
 	text = strings.ReplaceAll(text, `\n`, "\n")
 

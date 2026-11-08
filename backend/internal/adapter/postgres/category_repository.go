@@ -11,17 +11,14 @@ import (
 	"github.com/alexey/anekdot-bot/backend/internal/domain"
 )
 
-// CategoryRepository stores categories in PostgreSQL.
 type CategoryRepository struct {
 	pool *pgxpool.Pool
 }
 
-// NewCategoryRepository returns a PostgreSQL backed category repository.
 func NewCategoryRepository(pool *pgxpool.Pool) *CategoryRepository {
 	return &CategoryRepository{pool: pool}
 }
 
-// List returns all categories ordered by name.
 func (r *CategoryRepository) List(ctx context.Context) ([]domain.Category, error) {
 	rows, err := r.pool.Query(ctx, `SELECT id, name FROM categories ORDER BY name`)
 	if err != nil {
@@ -46,7 +43,6 @@ func (r *CategoryRepository) List(ctx context.Context) ([]domain.Category, error
 	return categories, nil
 }
 
-// Get returns a single category by id.
 func (r *CategoryRepository) Get(ctx context.Context, id int) (domain.Category, error) {
 	var category domain.Category
 

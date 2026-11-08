@@ -18,18 +18,15 @@ type healthResponse struct {
 	Database string `json:"database"`
 }
 
-// HealthHandler reports service and database health.
 type HealthHandler struct {
 	pinger databasePinger
 	logger *slog.Logger
 }
 
-// NewHealthHandler builds the health endpoint handler.
 func NewHealthHandler(pinger databasePinger, logger *slog.Logger) *HealthHandler {
 	return &HealthHandler{pinger: pinger, logger: logger}
 }
 
-// Health handles GET /api/v1/health.
 func (h *HealthHandler) Health(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), healthCheckTimeout)
 	defer cancel()

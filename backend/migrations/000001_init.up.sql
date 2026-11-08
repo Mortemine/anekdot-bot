@@ -13,7 +13,6 @@ CREATE TABLE anekdots (
 
 CREATE INDEX idx_anekdots_category_id ON anekdots (category_id);
 
--- Guards the seeder against duplicate rows when it is re-run.
 CREATE UNIQUE INDEX idx_anekdots_category_text ON anekdots (category_id, md5(text));
 
 CREATE TABLE feedback_messages (

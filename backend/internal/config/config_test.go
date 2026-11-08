@@ -131,12 +131,12 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		},
 		{
 			name: "database scheme",
-			env:  map[string]string{"DATABASE_URL": "mysql://user:pass@localhost:3306/app"}, //nolint:gosec // not a real credential
+			env:  map[string]string{"DATABASE_URL": "mysql://user:pass@localhost:3306/app"},
 			want: "postgres scheme",
 		},
 		{
 			name: "database name",
-			env:  map[string]string{"DATABASE_URL": "postgres://user:pass@localhost:5432/"}, //nolint:gosec // not a real credential
+			env:  map[string]string{"DATABASE_URL": "postgres://user:pass@localhost:5432/"},
 			want: "database name",
 		},
 		{

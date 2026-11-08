@@ -13,7 +13,6 @@ import (
 	"github.com/alexey/anekdot-bot/backend/internal/domain"
 )
 
-// uniqueViolationCode is PostgreSQL's SQLSTATE for a unique index conflict.
 const uniqueViolationCode = "23505"
 
 const selectAnekdot = `
@@ -21,17 +20,14 @@ const selectAnekdot = `
 	FROM anekdots a
 	JOIN categories c ON c.id = a.category_id`
 
-// AnekdotRepository stores anecdotes in PostgreSQL.
 type AnekdotRepository struct {
 	pool *pgxpool.Pool
 }
 
-// NewAnekdotRepository returns a PostgreSQL backed anecdote repository.
 func NewAnekdotRepository(pool *pgxpool.Pool) *AnekdotRepository {
 	return &AnekdotRepository{pool: pool}
 }
 
-// Random returns a random anecdote from the whole table.
 func (r *AnekdotRepository) Random(ctx context.Context) (domain.Anekdot, error) {
 	anekdot, err := r.scanOne(ctx, selectAnekdot+` ORDER BY random() LIMIT 1`)
 	if err != nil {
@@ -45,7 +41,6 @@ func (r *AnekdotRepository) Random(ctx context.Context) (domain.Anekdot, error) 
 	return anekdot, nil
 }
 
-// RandomByCategory returns a random anecdote from a single category.
 func (r *AnekdotRepository) RandomByCategory(ctx context.Context, categoryID int) (domain.Anekdot, error) {
 	anekdot, err := r.scanOne(
 		ctx,
@@ -63,7 +58,6 @@ func (r *AnekdotRepository) RandomByCategory(ctx context.Context, categoryID int
 	return anekdot, nil
 }
 
-// CountsByCategory returns the number of anecdotes per category id.
 func (r *AnekdotRepository) CountsByCategory(ctx context.Context) (map[int]int, error) {
 	rows, err := r.pool.Query(ctx, `SELECT category_id, count(*) FROM anekdots GROUP BY category_id`)
 	if err != nil {
@@ -91,7 +85,6 @@ func (r *AnekdotRepository) CountsByCategory(ctx context.Context) (map[int]int, 
 	return counts, nil
 }
 
-// ByID returns a single anecdote.
 func (r *AnekdotRepository) ByID(ctx context.Context, id int64) (domain.Anekdot, error) {
 	anekdot, err := r.scanOne(ctx, selectAnekdot+` WHERE a.id = $1`, id)
 	if err != nil {
@@ -105,7 +98,6 @@ func (r *AnekdotRepository) ByID(ctx context.Context, id int64) (domain.Anekdot,
 	return anekdot, nil
 }
 
-// Create stores a new anecdote and returns the stored row.
 func (r *AnekdotRepository) Create(ctx context.Context, anekdot domain.Anekdot) (domain.Anekdot, error) {
 	created, err := scanAnekdot(r.pool.QueryRow(
 		ctx,
@@ -132,7 +124,6 @@ func (r *AnekdotRepository) Create(ctx context.Context, anekdot domain.Anekdot) 
 	return created, nil
 }
 
-// ListByAuthor returns the anecdotes submitted by one user, newest first.
 func (r *AnekdotRepository) ListByAuthor(ctx context.Context, authorID int64, limit int) ([]domain.Anekdot, error) {
 	rows, err := r.pool.Query(
 		ctx,

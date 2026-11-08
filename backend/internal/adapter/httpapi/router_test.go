@@ -297,7 +297,6 @@ func (f *fixture) handler(t *testing.T) http.Handler {
 	return handler
 }
 
-// token registers the default test user and returns its session token.
 func (f *fixture) token(t *testing.T, handler http.Handler) string {
 	t.Helper()
 

@@ -11,17 +11,14 @@ import (
 	"github.com/alexey/anekdot-bot/backend/internal/domain"
 )
 
-// SessionRepository stores issued sessions in PostgreSQL.
 type SessionRepository struct {
 	pool *pgxpool.Pool
 }
 
-// NewSessionRepository returns a PostgreSQL backed session repository.
 func NewSessionRepository(pool *pgxpool.Pool) *SessionRepository {
 	return &SessionRepository{pool: pool}
 }
 
-// Create stores a new session.
 func (r *SessionRepository) Create(ctx context.Context, session domain.Session) error {
 	_, err := r.pool.Exec(
 		ctx,
@@ -37,7 +34,6 @@ func (r *SessionRepository) Create(ctx context.Context, session domain.Session) 
 	return nil
 }
 
-// ByTokenHash resolves a live session to its user.
 func (r *SessionRepository) ByTokenHash(ctx context.Context, tokenHash string) (domain.User, error) {
 	var user domain.User
 
@@ -60,7 +56,6 @@ func (r *SessionRepository) ByTokenHash(ctx context.Context, tokenHash string) (
 	return user, nil
 }
 
-// Delete removes one session.
 func (r *SessionRepository) Delete(ctx context.Context, tokenHash string) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM sessions WHERE token_hash = $1`, tokenHash)
 	if err != nil {

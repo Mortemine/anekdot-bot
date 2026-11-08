@@ -1,4 +1,3 @@
-// Package app runs the HTTP server lifecycle.
 package app
 
 import (
@@ -17,7 +16,6 @@ import (
 	"github.com/alexey/anekdot-bot/backend/internal/config"
 )
 
-// Run starts the HTTP server and blocks until a shutdown signal arrives.
 func Run(ctx context.Context, cfg *config.Config, injector *do.RootScope, logger *slog.Logger) error {
 	signalCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()

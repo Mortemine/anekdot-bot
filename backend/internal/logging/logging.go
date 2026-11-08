@@ -1,4 +1,3 @@
-// Package logging builds the application logger.
 package logging
 
 import (
@@ -6,7 +5,6 @@ import (
 	"os"
 )
 
-// New returns a structured logger writing to stdout.
 func New(level slog.Level, format string) *slog.Logger {
 	options := &slog.HandlerOptions{
 		Level:     level,

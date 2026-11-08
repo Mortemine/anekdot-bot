@@ -1,4 +1,3 @@
-// Command seed imports the legacy text dumps into PostgreSQL.
 package main
 
 import (
