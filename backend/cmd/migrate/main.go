@@ -26,7 +26,7 @@ func main() {
 }
 
 func run() error {
-	direction := flag.String("direction", "up", "migration direction: up or down")
+	direction := flag.String("direction", "up", "migration direction: up, down or version")
 	steps := flag.Int("steps", 0, "number of migrations to roll back (0 = all)")
 	flag.Parse()
 
@@ -72,8 +72,10 @@ func run() error {
 		} else {
 			err = migrator.Down()
 		}
+	case "version":
+		return printVersion(migrator)
 	default:
-		return fmt.Errorf("unsupported direction %q: use up or down", *direction)
+		return fmt.Errorf("unsupported direction %q: use up, down or version", *direction)
 	}
 
 	if errors.Is(err, migrate.ErrNoChange) {
@@ -86,6 +88,22 @@ func run() error {
 	}
 
 	slog.Info("migrations applied", "direction", *direction)
+
+	return nil
+}
+
+func printVersion(migrator *migrate.Migrate) error {
+	version, dirty, err := migrator.Version()
+	if errors.Is(err, migrate.ErrNilVersion) {
+		slog.Info("no migrations applied")
+
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("reading migration version: %w", err)
+	}
+
+	slog.Info("migration version", "version", version, "dirty", dirty)
 
 	return nil
 }
