@@ -18,8 +18,11 @@ import (
 )
 
 const (
-	feedbackRateWindow = time.Minute
-	feedbackRateBurst  = 5
+	// Rate limits protect the endpoints that cost CPU (bcrypt) or write rows.
+	authRateWindow  = time.Minute
+	authRateBurst   = 10
+	writeRateWindow = time.Minute
+	writeRateBurst  = 10
 )
 
 // NewRouter builds the HTTP handler tree with all middleware applied.
@@ -27,37 +30,46 @@ func NewRouter(
 	cfg *config.Config,
 	logger *slog.Logger,
 	anekdotService *usecase.AnekdotService,
-	feedbackService *usecase.FeedbackService,
+	authService *usecase.AuthService,
 	pinger databasePinger,
 ) (http.Handler, error) {
 	mux := http.NewServeMux()
 
 	anekdotHandler := NewAnekdotHandler(anekdotService, logger)
-	feedbackHandler := NewFeedbackHandler(feedbackService, logger)
+	favoriteHandler := NewFavoriteHandler(anekdotService, logger)
+	authHandler := NewAuthHandler(authService, logger)
 	healthHandler := NewHealthHandler(pinger, logger)
+
+	requireAuth := authMiddleware(authService, logger)
 
 	mux.HandleFunc("GET /api/v1/health", healthHandler.Health)
 	mux.HandleFunc("GET /api/v1/categories", anekdotHandler.ListCategories)
 	mux.HandleFunc("GET /api/v1/anekdots/random", anekdotHandler.Random)
 	mux.HandleFunc("GET /api/v1/anekdots/external", anekdotHandler.External)
+	mux.Handle("GET /api/v1/anekdots/mine", requireAuth(http.HandlerFunc(anekdotHandler.Mine)))
 
-	feedbackLimiter := newIPRateLimiter(
-		rate.Every(feedbackRateWindow/feedbackRateBurst),
-		feedbackRateBurst,
+	authLimiter := newIPRateLimiter(rate.Every(authRateWindow/authRateBurst), authRateBurst)
+	mux.Handle(
+		"POST /api/v1/auth/register",
+		rateLimitMiddleware(authLimiter, cfg.TrustProxyHeaders, logger)(http.HandlerFunc(authHandler.Register)),
 	)
 	mux.Handle(
-		"POST /api/v1/feedback",
-		rateLimitMiddleware(feedbackLimiter, cfg.TrustProxyHeaders, logger)(http.HandlerFunc(feedbackHandler.Create)),
+		"POST /api/v1/auth/login",
+		rateLimitMiddleware(authLimiter, cfg.TrustProxyHeaders, logger)(http.HandlerFunc(authHandler.Login)),
+	)
+	mux.Handle("POST /api/v1/auth/logout", requireAuth(http.HandlerFunc(authHandler.Logout)))
+	mux.Handle("GET /api/v1/auth/me", requireAuth(http.HandlerFunc(authHandler.Me)))
+
+	writeLimiter := newIPRateLimiter(rate.Every(writeRateWindow/writeRateBurst), writeRateBurst)
+	writeLimited := rateLimitMiddleware(writeLimiter, cfg.TrustProxyHeaders, logger)
+	mux.Handle(
+		"POST /api/v1/anekdots",
+		requireAuth(writeLimited(http.HandlerFunc(anekdotHandler.Create))),
 	)
 
-	if cfg.AdminEnabled() {
-		mux.Handle(
-			"GET /api/v1/admin/feedback",
-			requireAdmin(cfg.AdminToken)(http.HandlerFunc(feedbackHandler.List)),
-		)
-	} else {
-		logger.Warn("admin API disabled: ADMIN_TOKEN is not set")
-	}
+	mux.Handle("GET /api/v1/favorites", requireAuth(http.HandlerFunc(favoriteHandler.List)))
+	mux.Handle("PUT /api/v1/favorites/{anekdot_id}", requireAuth(http.HandlerFunc(favoriteHandler.Add)))
+	mux.Handle("DELETE /api/v1/favorites/{anekdot_id}", requireAuth(http.HandlerFunc(favoriteHandler.Remove)))
 
 	mux.HandleFunc("GET /api/v1/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "Эндпоинт не найден.")

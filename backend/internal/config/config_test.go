@@ -17,7 +17,7 @@ func cleanEnv(t *testing.T) {
 		"DB_MIN_CONNS",
 		"DB_MAX_CONN_LIFETIME",
 		"DB_MAX_CONN_IDLE_TIME",
-		"ADMIN_TOKEN",
+		"SESSION_TTL",
 		"CORS_ORIGINS",
 		"TRUST_PROXY_HEADERS",
 		"WEB_DIR",
@@ -61,8 +61,8 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.ShutdownTimeout != 15*time.Second {
 		t.Errorf("ShutdownTimeout = %v, want 15s", cfg.ShutdownTimeout)
 	}
-	if cfg.AdminEnabled() {
-		t.Error("AdminEnabled() = true, want false")
+	if cfg.SessionTTL != 30*24*time.Hour {
+		t.Errorf("SessionTTL = %v, want 720h", cfg.SessionTTL)
 	}
 	if len(cfg.CORSOrigins) != 1 || cfg.CORSOrigins[0] != "http://localhost:5173" {
 		t.Errorf("CORSOrigins = %v, want [http://localhost:5173]", cfg.CORSOrigins)
@@ -77,7 +77,7 @@ func TestLoadOverrides(t *testing.T) {
 
 	t.Setenv("HTTP_ADDR", "127.0.0.1:9090")
 	t.Setenv("DATABASE_URL", "postgres://user:pass@db:5432/app?sslmode=require")
-	t.Setenv("ADMIN_TOKEN", "0123456789abcdef")
+	t.Setenv("SESSION_TTL", "48h")
 	t.Setenv("CORS_ORIGINS", "https://example.com/, https://app.example.com")
 	t.Setenv("TRUST_PROXY_HEADERS", "true")
 	t.Setenv("LOG_LEVEL", "debug")
@@ -95,8 +95,8 @@ func TestLoadOverrides(t *testing.T) {
 	if cfg.HTTPAddr != "127.0.0.1:9090" {
 		t.Errorf("HTTPAddr = %q", cfg.HTTPAddr)
 	}
-	if !cfg.AdminEnabled() {
-		t.Error("AdminEnabled() = false, want true")
+	if cfg.SessionTTL != 48*time.Hour {
+		t.Errorf("SessionTTL = %v, want 48h", cfg.SessionTTL)
 	}
 	if !cfg.TrustProxyHeaders {
 		t.Error("TrustProxyHeaders = false, want true")
@@ -165,9 +165,9 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 			want: "LOG_FORMAT",
 		},
 		{
-			name: "admin token",
-			env:  map[string]string{"ADMIN_TOKEN": "short"},
-			want: "ADMIN_TOKEN",
+			name: "session ttl",
+			env:  map[string]string{"SESSION_TTL": "0s"},
+			want: "SESSION_TTL",
 		},
 		{
 			name: "cors origin",

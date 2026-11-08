@@ -10,7 +10,10 @@ import (
 	"github.com/alexey/anekdot-bot/backend/internal/usecase"
 )
 
-const externalAnekdotSource = "baneks.site"
+const (
+	externalAnekdotSource = "baneks.site"
+	maxAnekdotBodyBytes   = 16 << 10
+)
 
 type categoryDTO struct {
 	ID           int    `json:"id"`
@@ -23,6 +26,7 @@ type anekdotDTO struct {
 	CategoryID   int    `json:"category_id"`
 	CategoryName string `json:"category_name"`
 	Text         string `json:"text"`
+	AuthorID     *int64 `json:"author_id,omitempty"`
 }
 
 type externalAnekdotDTO struct {
@@ -38,8 +42,18 @@ type anekdotResponse struct {
 	Anekdot anekdotDTO `json:"anekdot"`
 }
 
+type anekdotsResponse struct {
+	Anekdots []anekdotDTO `json:"anekdots"`
+}
+
 type externalAnekdotResponse struct {
 	Anekdot externalAnekdotDTO `json:"anekdot"`
+}
+
+// createAnekdotRequest is the body of POST /api/v1/anekdots.
+type createAnekdotRequest struct {
+	CategoryID int    `json:"category_id"`
+	Text       string `json:"text"`
 }
 
 // AnekdotHandler exposes category and anecdote endpoints.
@@ -112,6 +126,58 @@ func (h *AnekdotHandler) External(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Create handles POST /api/v1/anekdots.
+func (h *AnekdotHandler) Create(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "Требуется вход в аккаунт.")
+
+		return
+	}
+
+	var payload createAnekdotRequest
+	if !decodeRequest(w, r, maxAnekdotBodyBytes, &payload) {
+		return
+	}
+
+	created, err := h.service.Create(r.Context(), user.ID, payload.CategoryID, payload.Text)
+	if err != nil {
+		h.handleError(w, r, err)
+
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, anekdotResponse{Anekdot: toAnekdotDTO(created)})
+}
+
+// Mine handles GET /api/v1/anekdots/mine.
+func (h *AnekdotHandler) Mine(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "Требуется вход в аккаунт.")
+
+		return
+	}
+
+	anekdots, err := h.service.Mine(r.Context(), user.ID)
+	if err != nil {
+		h.handleError(w, r, err)
+
+		return
+	}
+
+	writeJSON(w, http.StatusOK, anekdotsResponse{Anekdots: toAnekdotsDTO(anekdots)})
+}
+
+func toAnekdotsDTO(anekdots []domain.Anekdot) []anekdotDTO {
+	payload := make([]anekdotDTO, 0, len(anekdots))
+	for _, anekdot := range anekdots {
+		payload = append(payload, toAnekdotDTO(anekdot))
+	}
+
+	return payload
+}
+
 func (h *AnekdotHandler) handleError(w http.ResponseWriter, r *http.Request, err error) {
 	if !isExpectedError(err) {
 		h.logger.ErrorContext(
@@ -146,5 +212,6 @@ func toAnekdotDTO(anekdot domain.Anekdot) anekdotDTO {
 		CategoryID:   anekdot.CategoryID,
 		CategoryName: anekdot.CategoryName,
 		Text:         anekdot.Text,
+		AuthorID:     anekdot.AuthorID,
 	}
 }

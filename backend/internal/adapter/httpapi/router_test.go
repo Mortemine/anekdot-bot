@@ -19,8 +19,6 @@ import (
 	"github.com/alexey/anekdot-bot/backend/internal/usecase"
 )
 
-const testAdminToken = "0123456789abcdef"
-
 type categoryStub struct {
 	categories []domain.Category
 	listErr    error
@@ -54,6 +52,14 @@ type anekdotStub struct {
 	countsErr          error
 	receivedCategoryID int
 	byCategoryCalled   bool
+
+	byID        domain.Anekdot
+	byIDErr     error
+	created     domain.Anekdot
+	createErr   error
+	createArg   domain.Anekdot
+	authored    []domain.Anekdot
+	authoredErr error
 }
 
 func (s *anekdotStub) Random(context.Context) (domain.Anekdot, error) {
@@ -71,6 +77,20 @@ func (s *anekdotStub) CountsByCategory(context.Context) (map[int]int, error) {
 	return s.counts, s.countsErr
 }
 
+func (s *anekdotStub) ByID(context.Context, int64) (domain.Anekdot, error) {
+	return s.byID, s.byIDErr
+}
+
+func (s *anekdotStub) Create(_ context.Context, anekdot domain.Anekdot) (domain.Anekdot, error) {
+	s.createArg = anekdot
+
+	return s.created, s.createErr
+}
+
+func (s *anekdotStub) ListByAuthor(context.Context, int64, int) ([]domain.Anekdot, error) {
+	return s.authored, s.authoredErr
+}
+
 type externalStub struct {
 	text string
 	err  error
@@ -80,29 +100,127 @@ func (s *externalStub) Random(context.Context) (string, error) {
 	return s.text, s.err
 }
 
-type feedbackStub struct {
-	created     domain.Feedback
-	createErr   error
-	messages    []domain.Feedback
-	listErr     error
-	lastMessage string
-	lastContact *string
-	lastLimit   int
-	lastOffset  int
+type userStub struct {
+	byEmail   map[string]domain.Credentials
+	byID      map[int64]domain.User
+	nextID    int64
+	createErr error
 }
 
-func (s *feedbackStub) Create(_ context.Context, message string, contact *string) (domain.Feedback, error) {
-	s.lastMessage = message
-	s.lastContact = contact
+func (s *userStub) Create(_ context.Context, email, displayName, passwordHash string) (domain.User, error) {
+	if s.createErr != nil {
+		return domain.User{}, s.createErr
+	}
 
-	return s.created, s.createErr
+	if _, ok := s.byEmail[email]; ok {
+		return domain.User{}, domain.ErrConflict
+	}
+
+	s.nextID++
+
+	user := domain.User{
+		ID:          s.nextID,
+		Email:       email,
+		DisplayName: displayName,
+		CreatedAt:   time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC),
+	}
+	s.byID[user.ID] = user
+	s.byEmail[email] = domain.Credentials{User: user, PasswordHash: passwordHash}
+
+	return user, nil
 }
 
-func (s *feedbackStub) List(_ context.Context, limit, offset int) ([]domain.Feedback, error) {
-	s.lastLimit = limit
-	s.lastOffset = offset
+func (s *userStub) ByEmail(_ context.Context, email string) (domain.Credentials, error) {
+	credentials, ok := s.byEmail[email]
+	if !ok {
+		return domain.Credentials{}, domain.ErrNotFound
+	}
 
-	return s.messages, s.listErr
+	return credentials, nil
+}
+
+func (s *userStub) ByID(_ context.Context, id int64) (domain.User, error) {
+	user, ok := s.byID[id]
+	if !ok {
+		return domain.User{}, domain.ErrNotFound
+	}
+
+	return user, nil
+}
+
+type sessionStub struct {
+	users     *userStub
+	sessions  map[string]domain.Session
+	createErr error
+	lookupErr error
+	deleteErr error
+	deleted   []string
+}
+
+func (s *sessionStub) Create(_ context.Context, session domain.Session) error {
+	if s.createErr != nil {
+		return s.createErr
+	}
+
+	s.sessions[session.TokenHash] = session
+
+	return nil
+}
+
+func (s *sessionStub) ByTokenHash(_ context.Context, tokenHash string) (domain.User, error) {
+	if s.lookupErr != nil {
+		return domain.User{}, s.lookupErr
+	}
+
+	session, ok := s.sessions[tokenHash]
+	if !ok {
+		return domain.User{}, domain.ErrNotFound
+	}
+
+	return s.users.byID[session.UserID], nil
+}
+
+func (s *sessionStub) Delete(_ context.Context, tokenHash string) error {
+	if s.deleteErr != nil {
+		return s.deleteErr
+	}
+
+	delete(s.sessions, tokenHash)
+	s.deleted = append(s.deleted, tokenHash)
+
+	return nil
+}
+
+type favoriteStub struct {
+	list      []domain.Anekdot
+	addErr    error
+	removeErr error
+	added     []int64
+	removed   []int64
+}
+
+func (s *favoriteStub) List(context.Context, int64) ([]domain.Anekdot, error) {
+	return s.list, nil
+}
+
+func (s *favoriteStub) Add(_ context.Context, _, anekdotID int64) error {
+	if s.addErr != nil {
+		return s.addErr
+	}
+
+	s.added = append(s.added, anekdotID)
+
+	return nil
+}
+
+func (s *favoriteStub) Remove(_ context.Context, _, anekdotID int64) error {
+	if s.removeErr != nil {
+		return s.removeErr
+	}
+
+	s.removed = append(s.removed, anekdotID)
+
+	return nil
 }
 
 type pingerStub struct {
@@ -117,12 +235,24 @@ type fixture struct {
 	categories *categoryStub
 	anekdots   *anekdotStub
 	external   *externalStub
-	feedback   *feedbackStub
+	favorites  *favoriteStub
+	users      *userStub
+	sessions   *sessionStub
 	pinger     pingerStub
 	cfg        *config.Config
 }
 
+const (
+	testEmail    = "reader@example.com"
+	testPassword = "password123"
+)
+
 func newFixture() *fixture {
+	users := &userStub{
+		byEmail: map[string]domain.Credentials{},
+		byID:    map[int64]domain.User{},
+	}
+
 	return &fixture{
 		categories: &categoryStub{byID: map[int]domain.Category{
 			0: {ID: 0, Name: "Вне категорий"},
@@ -132,20 +262,18 @@ func newFixture() *fixture {
 			random:     domain.Anekdot{ID: 1, Text: "глобальный"},
 			byCategory: domain.Anekdot{ID: 2, CategoryID: 1, Text: "категорийный"},
 			counts:     map[int]int{},
+			byID:       domain.Anekdot{ID: 4, CategoryID: 1, Text: "избранный"},
+			created:    domain.Anekdot{ID: 6, CategoryID: 1, Text: "свой анекдот"},
+			authored:   []domain.Anekdot{{ID: 6, CategoryID: 1, Text: "свой анекдот"}},
 		},
-		external: &externalStub{text: "внешний"},
-		feedback: &feedbackStub{
-			created: domain.Feedback{
-				ID:        1,
-				Message:   "привет",
-				Status:    domain.FeedbackStatusNew,
-				CreatedAt: time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC),
-			},
-		},
-		pinger: pingerStub{},
+		external:  &externalStub{text: "внешний"},
+		favorites: &favoriteStub{list: []domain.Anekdot{{ID: 4, CategoryID: 1, Text: "избранный"}}},
+		users:     users,
+		sessions:  &sessionStub{users: users, sessions: map[string]domain.Session{}},
+		pinger:    pingerStub{},
 		cfg: &config.Config{
 			HTTPAddr:    ":8080",
-			AdminToken:  testAdminToken,
+			SessionTTL:  time.Hour,
 			CORSOrigins: []string{"http://localhost:5173"},
 		},
 	}
@@ -158,8 +286,8 @@ func (f *fixture) handler(t *testing.T) http.Handler {
 	handler, err := NewRouter(
 		f.cfg,
 		logger,
-		usecase.NewAnekdotService(f.categories, f.anekdots, f.external, logger),
-		usecase.NewFeedbackService(f.feedback),
+		usecase.NewAnekdotService(f.categories, f.anekdots, f.favorites, f.external, logger),
+		usecase.NewAuthService(f.users, f.sessions, f.cfg.SessionTTL, logger),
 		f.pinger,
 	)
 	if err != nil {
@@ -167,6 +295,29 @@ func (f *fixture) handler(t *testing.T) http.Handler {
 	}
 
 	return handler
+}
+
+// token registers the default test user and returns its session token.
+func (f *fixture) token(t *testing.T, handler http.Handler) string {
+	t.Helper()
+
+	recorder := perform(
+		t,
+		handler,
+		http.MethodPost,
+		"/api/v1/auth/register",
+		strings.NewReader(`{"email":"`+testEmail+`","password":"`+testPassword+`"}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("register status = %d, want 201: %s", recorder.Code, recorder.Body.String())
+	}
+
+	return decodeBody[authResponse](t, recorder).Token
+}
+
+func bearer(token string) map[string]string {
+	return map[string]string{"Authorization": "Bearer " + token}
 }
 
 func perform(
@@ -348,7 +499,7 @@ func TestExternalEndpoint(t *testing.T) {
 	})
 }
 
-func TestFeedbackCreate(t *testing.T) {
+func TestAuthRegister(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		f := newFixture()
 
@@ -356,24 +507,60 @@ func TestFeedbackCreate(t *testing.T) {
 			t,
 			f.handler(t),
 			http.MethodPost,
-			"/api/v1/feedback",
-			strings.NewReader(`{"message":"привет","contact":"@user"}`),
+			"/api/v1/auth/register",
+			strings.NewReader(`{"email":"New@Example.com","password":"password123","display_name":"Читатель"}`),
 			map[string]string{"Content-Type": "application/json"},
 		)
 
 		if recorder.Code != http.StatusCreated {
 			t.Fatalf("status = %d, want 201: %s", recorder.Code, recorder.Body.String())
 		}
-		if f.feedback.lastMessage != "привет" {
-			t.Errorf("stored message = %q", f.feedback.lastMessage)
-		}
-		if f.feedback.lastContact == nil || *f.feedback.lastContact != "@user" {
-			t.Errorf("stored contact = %v", f.feedback.lastContact)
-		}
 
-		payload := decodeBody[feedbackResponse](t, recorder)
-		if payload.Feedback.Status != string(domain.FeedbackStatusNew) {
-			t.Errorf("status = %q", payload.Feedback.Status)
+		payload := decodeBody[authResponse](t, recorder)
+		if payload.Token == "" {
+			t.Error("token is empty")
+		}
+		if payload.User.Email != "new@example.com" {
+			t.Errorf("email = %q, want normalized", payload.User.Email)
+		}
+		if payload.User.DisplayName != "Читатель" {
+			t.Errorf("display name = %q", payload.User.DisplayName)
+		}
+	})
+
+	t.Run("display name falls back to email", func(t *testing.T) {
+		f := newFixture()
+
+		recorder := perform(
+			t,
+			f.handler(t),
+			http.MethodPost,
+			"/api/v1/auth/register",
+			strings.NewReader(`{"email":"reader@example.com","password":"password123"}`),
+			map[string]string{"Content-Type": "application/json"},
+		)
+
+		payload := decodeBody[authResponse](t, recorder)
+		if payload.User.DisplayName != "reader" {
+			t.Errorf("display name = %q, want reader", payload.User.DisplayName)
+		}
+	})
+
+	t.Run("duplicate email", func(t *testing.T) {
+		f := newFixture()
+		handler := f.handler(t)
+		f.token(t, handler)
+
+		recorder := perform(
+			t,
+			handler,
+			http.MethodPost,
+			"/api/v1/auth/register",
+			strings.NewReader(`{"email":"`+testEmail+`","password":"password123"}`),
+			map[string]string{"Content-Type": "application/json"},
+		)
+		if recorder.Code != http.StatusConflict {
+			t.Fatalf("status = %d, want 409: %s", recorder.Code, recorder.Body.String())
 		}
 	})
 
@@ -384,26 +571,26 @@ func TestFeedbackCreate(t *testing.T) {
 		errorCode string
 	}{
 		{
-			name:      "empty message",
-			body:      `{"message":"   "}`,
+			name:      "short password",
+			body:      `{"email":"reader@example.com","password":"short"}`,
+			code:      400,
+			errorCode: "invalid_input",
+		},
+		{
+			name:      "invalid email",
+			body:      `{"email":"не почта","password":"password123"}`,
 			code:      400,
 			errorCode: "invalid_input",
 		},
 		{
 			name:      "unknown field",
-			body:      `{"message":"привет","admin":true}`,
+			body:      `{"email":"reader@example.com","password":"password123","admin":true}`,
 			code:      400,
 			errorCode: "invalid_json",
 		},
 		{
 			name:      "malformed json",
-			body:      `{"message":`,
-			code:      400,
-			errorCode: "invalid_json",
-		},
-		{
-			name:      "trailing content",
-			body:      `{"message":"привет"}{"message":"ещё"}`,
+			body:      `{"email":`,
 			code:      400,
 			errorCode: "invalid_json",
 		},
@@ -417,7 +604,7 @@ func TestFeedbackCreate(t *testing.T) {
 				t,
 				f.handler(t),
 				http.MethodPost,
-				"/api/v1/feedback",
+				"/api/v1/auth/register",
 				strings.NewReader(test.body),
 				map[string]string{"Content-Type": "application/json"},
 			)
@@ -431,62 +618,366 @@ func TestFeedbackCreate(t *testing.T) {
 			}
 		})
 	}
+}
 
-	t.Run("payload too large", func(t *testing.T) {
+func TestAuthLogin(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
 		f := newFixture()
-		body := `{"message":"` + strings.Repeat("а", maxFeedbackBodyBytes) + `"}`
+		handler := f.handler(t)
+		f.token(t, handler)
+
+		recorder := perform(
+			t,
+			handler,
+			http.MethodPost,
+			"/api/v1/auth/login",
+			strings.NewReader(`{"email":"`+testEmail+`","password":"`+testPassword+`"}`),
+			map[string]string{"Content-Type": "application/json"},
+		)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+		}
+
+		if decodeBody[authResponse](t, recorder).Token == "" {
+			t.Error("token is empty")
+		}
+	})
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "wrong password",
+			body: `{"email":"` + testEmail + `","password":"wrong-password"}`,
+		},
+		{
+			name: "unknown email",
+			body: `{"email":"nobody@example.com","password":"` + testPassword + `"}`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			f := newFixture()
+			handler := f.handler(t)
+			f.token(t, handler)
+
+			recorder := perform(
+				t,
+				handler,
+				http.MethodPost,
+				"/api/v1/auth/login",
+				strings.NewReader(test.body),
+				map[string]string{"Content-Type": "application/json"},
+			)
+			if recorder.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want 401: %s", recorder.Code, recorder.Body.String())
+			}
+			if recorder.Header().Get("WWW-Authenticate") == "" {
+				t.Error("WWW-Authenticate header is missing")
+			}
+
+			payload := decodeBody[errorEnvelope](t, recorder)
+			if payload.Error.Code != "unauthorized" {
+				t.Errorf("error code = %q, want unauthorized", payload.Error.Code)
+			}
+		})
+	}
+}
+
+func TestAuthMeAndLogout(t *testing.T) {
+	f := newFixture()
+	handler := f.handler(t)
+
+	t.Run("me requires a token", func(t *testing.T) {
+		recorder := perform(t, handler, http.MethodGet, "/api/v1/auth/me", nil, nil)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401: %s", recorder.Code, recorder.Body.String())
+		}
+	})
+
+	t.Run("unknown token", func(t *testing.T) {
+		recorder := perform(t, handler, http.MethodGet, "/api/v1/auth/me", nil, bearer("unknown-token"))
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401", recorder.Code)
+		}
+	})
+
+	token := f.token(t, handler)
+
+	t.Run("me", func(t *testing.T) {
+		recorder := perform(t, handler, http.MethodGet, "/api/v1/auth/me", nil, bearer(token))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+		}
+
+		payload := decodeBody[sessionResponse](t, recorder)
+		if payload.User.Email != testEmail {
+			t.Errorf("email = %q, want %q", payload.User.Email, testEmail)
+		}
+	})
+
+	t.Run("logout", func(t *testing.T) {
+		recorder := perform(t, handler, http.MethodPost, "/api/v1/auth/logout", nil, bearer(token))
+		if recorder.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want 204: %s", recorder.Code, recorder.Body.String())
+		}
+
+		recorder = perform(t, handler, http.MethodGet, "/api/v1/auth/me", nil, bearer(token))
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("status after logout = %d, want 401", recorder.Code)
+		}
+	})
+}
+
+func TestFavoritesEndpoints(t *testing.T) {
+	f := newFixture()
+	handler := f.handler(t)
+
+	t.Run("requires a token", func(t *testing.T) {
+		cases := []struct {
+			method string
+			target string
+		}{
+			{method: http.MethodGet, target: "/api/v1/favorites"},
+			{method: http.MethodPut, target: "/api/v1/favorites/4"},
+			{method: http.MethodDelete, target: "/api/v1/favorites/4"},
+		}
+
+		for _, test := range cases {
+			recorder := perform(t, handler, test.method, test.target, nil, nil)
+			if recorder.Code != http.StatusUnauthorized {
+				t.Fatalf("%s %s status = %d, want 401", test.method, test.target, recorder.Code)
+			}
+		}
+	})
+
+	token := f.token(t, handler)
+
+	t.Run("list", func(t *testing.T) {
+		recorder := perform(t, handler, http.MethodGet, "/api/v1/favorites", nil, bearer(token))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+		}
+
+		payload := decodeBody[anekdotsResponse](t, recorder)
+		if len(payload.Anekdots) != 1 || payload.Anekdots[0].ID != 4 {
+			t.Errorf("favorites = %+v", payload.Anekdots)
+		}
+	})
+
+	t.Run("add", func(t *testing.T) {
+		recorder := perform(t, handler, http.MethodPut, "/api/v1/favorites/4", nil, bearer(token))
+		if recorder.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want 204: %s", recorder.Code, recorder.Body.String())
+		}
+		if len(f.favorites.added) != 1 || f.favorites.added[0] != 4 {
+			t.Errorf("added = %v, want [4]", f.favorites.added)
+		}
+	})
+
+	t.Run("remove", func(t *testing.T) {
+		recorder := perform(t, handler, http.MethodDelete, "/api/v1/favorites/4", nil, bearer(token))
+		if recorder.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want 204: %s", recorder.Code, recorder.Body.String())
+		}
+		if len(f.favorites.removed) != 1 || f.favorites.removed[0] != 4 {
+			t.Errorf("removed = %v, want [4]", f.favorites.removed)
+		}
+	})
+
+	t.Run("invalid id", func(t *testing.T) {
+		for _, target := range []string{"/api/v1/favorites/0", "/api/v1/favorites/abc"} {
+			recorder := perform(t, handler, http.MethodPut, target, nil, bearer(token))
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("PUT %s status = %d, want 400", target, recorder.Code)
+			}
+		}
+	})
+
+	t.Run("missing anecdote", func(t *testing.T) {
+		f.anekdots.byIDErr = domain.ErrNotFound
+		t.Cleanup(func() { f.anekdots.byIDErr = nil })
+
+		recorder := perform(t, handler, http.MethodPut, "/api/v1/favorites/99", nil, bearer(token))
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404", recorder.Code)
+		}
+	})
+}
+
+func TestSubmitAnekdot(t *testing.T) {
+	t.Run("requires a token", func(t *testing.T) {
+		f := newFixture()
 
 		recorder := perform(
 			t,
 			f.handler(t),
 			http.MethodPost,
-			"/api/v1/feedback",
-			strings.NewReader(body),
+			"/api/v1/anekdots",
+			strings.NewReader(`{"category_id":1,"text":"свой анекдот"}`),
 			map[string]string{"Content-Type": "application/json"},
+		)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401: %s", recorder.Code, recorder.Body.String())
+		}
+	})
+
+	t.Run("success", func(t *testing.T) {
+		f := newFixture()
+		handler := f.handler(t)
+		token := f.token(t, handler)
+
+		recorder := perform(
+			t,
+			handler,
+			http.MethodPost,
+			"/api/v1/anekdots",
+			strings.NewReader(`{"category_id":1,"text":"свой анекдот"}`),
+			bearer(token),
+		)
+		if recorder.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want 201: %s", recorder.Code, recorder.Body.String())
+		}
+
+		if f.anekdots.createArg.AuthorID == nil {
+			t.Error("author is not set on the stored anecdote")
+		}
+
+		payload := decodeBody[anekdotResponse](t, recorder)
+		if payload.Anekdot.ID != 6 {
+			t.Errorf("id = %d, want 6", payload.Anekdot.ID)
+		}
+	})
+
+	tests := []struct {
+		name      string
+		body      string
+		code      int
+		errorCode string
+	}{
+		{
+			name:      "short text",
+			body:      `{"category_id":1,"text":"мало"}`,
+			code:      400,
+			errorCode: "invalid_input",
+		},
+		{
+			name:      "negative category",
+			body:      `{"category_id":-1,"text":"нормальный анекдот"}`,
+			code:      400,
+			errorCode: "invalid_input",
+		},
+		{
+			name:      "unknown category",
+			body:      `{"category_id":77,"text":"нормальный анекдот"}`,
+			code:      404,
+			errorCode: "not_found",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			f := newFixture()
+			handler := f.handler(t)
+			token := f.token(t, handler)
+
+			recorder := perform(
+				t,
+				handler,
+				http.MethodPost,
+				"/api/v1/anekdots",
+				strings.NewReader(test.body),
+				bearer(token),
+			)
+			if recorder.Code != test.code {
+				t.Fatalf("status = %d, want %d: %s", recorder.Code, test.code, recorder.Body.String())
+			}
+
+			payload := decodeBody[errorEnvelope](t, recorder)
+			if payload.Error.Code != test.errorCode {
+				t.Errorf("error code = %q, want %q", payload.Error.Code, test.errorCode)
+			}
+		})
+	}
+
+	t.Run("duplicate text", func(t *testing.T) {
+		f := newFixture()
+		f.anekdots.createErr = domain.ErrConflict
+		handler := f.handler(t)
+		token := f.token(t, handler)
+
+		recorder := perform(
+			t,
+			handler,
+			http.MethodPost,
+			"/api/v1/anekdots",
+			strings.NewReader(`{"category_id":1,"text":"повторяющийся анекдот"}`),
+			bearer(token),
+		)
+		if recorder.Code != http.StatusConflict {
+			t.Fatalf("status = %d, want 409: %s", recorder.Code, recorder.Body.String())
+		}
+	})
+
+	t.Run("payload too large", func(t *testing.T) {
+		f := newFixture()
+		handler := f.handler(t)
+		token := f.token(t, handler)
+		body := `{"category_id":1,"text":"` + strings.Repeat("а", maxAnekdotBodyBytes) + `"}`
+
+		recorder := perform(
+			t,
+			handler,
+			http.MethodPost,
+			"/api/v1/anekdots",
+			strings.NewReader(body),
+			bearer(token),
 		)
 		if recorder.Code != http.StatusRequestEntityTooLarge {
 			t.Fatalf("status = %d, want 413", recorder.Code)
 		}
 	})
-
-	t.Run("repository failure", func(t *testing.T) {
-		f := newFixture()
-		f.feedback.createErr = errors.New("boom")
-
-		recorder := perform(
-			t,
-			f.handler(t),
-			http.MethodPost,
-			"/api/v1/feedback",
-			strings.NewReader(`{"message":"привет"}`),
-			map[string]string{"Content-Type": "application/json"},
-		)
-		if recorder.Code != http.StatusInternalServerError {
-			t.Fatalf("status = %d, want 500", recorder.Code)
-		}
-
-		payload := decodeBody[errorEnvelope](t, recorder)
-		if payload.Error.Code != "internal_error" {
-			t.Errorf("error code = %q", payload.Error.Code)
-		}
-	})
 }
 
-func TestFeedbackRateLimit(t *testing.T) {
+func TestMineEndpoint(t *testing.T) {
 	f := newFixture()
 	handler := f.handler(t)
 
-	for attempt := 1; attempt <= feedbackRateBurst; attempt++ {
+	if recorder := perform(t, handler, http.MethodGet, "/api/v1/anekdots/mine", nil, nil); recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated status = %d, want 401", recorder.Code)
+	}
+
+	token := f.token(t, handler)
+
+	recorder := perform(t, handler, http.MethodGet, "/api/v1/anekdots/mine", nil, bearer(token))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+	}
+
+	payload := decodeBody[anekdotsResponse](t, recorder)
+	if len(payload.Anekdots) != 1 || payload.Anekdots[0].ID != 6 {
+		t.Errorf("anecdotes = %+v", payload.Anekdots)
+	}
+}
+
+func TestSubmitRateLimit(t *testing.T) {
+	f := newFixture()
+	handler := f.handler(t)
+	token := f.token(t, handler)
+
+	for attempt := 1; attempt <= writeRateBurst; attempt++ {
 		recorder := perform(
 			t,
 			handler,
 			http.MethodPost,
-			"/api/v1/feedback",
-			strings.NewReader(`{"message":"привет"}`),
-			map[string]string{"Content-Type": "application/json"},
+			"/api/v1/anekdots",
+			strings.NewReader(`{"category_id":1,"text":"свой анекдот"}`),
+			bearer(token),
 		)
 		if recorder.Code != http.StatusCreated {
-			t.Fatalf("attempt %d: status = %d, want 201", attempt, recorder.Code)
+			t.Fatalf("attempt %d: status = %d, want 201: %s", attempt, recorder.Code, recorder.Body.String())
 		}
 	}
 
@@ -494,99 +985,15 @@ func TestFeedbackRateLimit(t *testing.T) {
 		t,
 		handler,
 		http.MethodPost,
-		"/api/v1/feedback",
-		strings.NewReader(`{"message":"привет"}`),
-		map[string]string{"Content-Type": "application/json"},
+		"/api/v1/anekdots",
+		strings.NewReader(`{"category_id":1,"text":"свой анекдот"}`),
+		bearer(token),
 	)
 	if recorder.Code != http.StatusTooManyRequests {
 		t.Fatalf("status = %d, want 429", recorder.Code)
 	}
 	if recorder.Header().Get("Retry-After") != "60" {
 		t.Errorf("Retry-After = %q, want 60", recorder.Header().Get("Retry-After"))
-	}
-}
-
-func TestAdminFeedback(t *testing.T) {
-	f := newFixture()
-	f.feedback.messages = []domain.Feedback{{
-		ID:        5,
-		Message:   "сообщение",
-		Status:    domain.FeedbackStatusNew,
-		CreatedAt: time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC),
-	}}
-	handler := f.handler(t)
-
-	t.Run("missing token", func(t *testing.T) {
-		recorder := perform(t, handler, http.MethodGet, "/api/v1/admin/feedback", nil, nil)
-		if recorder.Code != http.StatusUnauthorized {
-			t.Fatalf("status = %d, want 401", recorder.Code)
-		}
-		if recorder.Header().Get("WWW-Authenticate") == "" {
-			t.Error("WWW-Authenticate header is missing")
-		}
-	})
-
-	t.Run("wrong token", func(t *testing.T) {
-		recorder := perform(
-			t,
-			handler,
-			http.MethodGet,
-			"/api/v1/admin/feedback",
-			nil,
-			map[string]string{"X-Admin-Token": "wrong-token"},
-		)
-		if recorder.Code != http.StatusUnauthorized {
-			t.Fatalf("status = %d, want 401", recorder.Code)
-		}
-	})
-
-	t.Run("header token", func(t *testing.T) {
-		recorder := perform(
-			t,
-			handler,
-			http.MethodGet,
-			"/api/v1/admin/feedback?limit=500&offset=-1",
-			nil,
-			map[string]string{"X-Admin-Token": testAdminToken},
-		)
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
-		}
-
-		payload := decodeBody[feedbackListResponse](t, recorder)
-		if len(payload.Feedback) != 1 || payload.Feedback[0].Message != "сообщение" {
-			t.Errorf("payload = %+v", payload.Feedback)
-		}
-		if payload.Pagination.Limit != 100 || payload.Pagination.Offset != 0 {
-			t.Errorf("pagination = %+v, want limit 100 offset 0", payload.Pagination)
-		}
-		if f.feedback.lastLimit != 100 || f.feedback.lastOffset != 0 {
-			t.Errorf("service received limit=%d offset=%d", f.feedback.lastLimit, f.feedback.lastOffset)
-		}
-	})
-
-	t.Run("bearer token", func(t *testing.T) {
-		recorder := perform(
-			t,
-			handler,
-			http.MethodGet,
-			"/api/v1/admin/feedback",
-			nil,
-			map[string]string{"Authorization": "Bearer " + testAdminToken},
-		)
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("status = %d, want 200", recorder.Code)
-		}
-	})
-}
-
-func TestAdminDisabled(t *testing.T) {
-	f := newFixture()
-	f.cfg.AdminToken = ""
-
-	recorder := perform(t, f.handler(t), http.MethodGet, "/api/v1/admin/feedback", nil, nil)
-	if recorder.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", recorder.Code)
 	}
 }
 
@@ -731,31 +1138,6 @@ func TestRecovererMiddleware(t *testing.T) {
 	recorder := perform(t, handler, http.MethodGet, "/panic", nil, nil)
 	if recorder.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", recorder.Code)
-	}
-}
-
-func TestParseBoundedInt(t *testing.T) {
-	tests := []struct {
-		name     string
-		raw      string
-		fallback int
-		minimum  int
-		maximum  int
-		want     int
-	}{
-		{name: "empty", raw: "", fallback: 50, minimum: 1, maximum: 100, want: 50},
-		{name: "invalid", raw: "abc", fallback: 50, minimum: 1, maximum: 100, want: 50},
-		{name: "below", raw: "-5", fallback: 50, minimum: 0, maximum: 100, want: 0},
-		{name: "above", raw: "500", fallback: 50, minimum: 1, maximum: 100, want: 100},
-		{name: "valid", raw: "25", fallback: 50, minimum: 1, maximum: 100, want: 25},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if got := parseBoundedInt(test.raw, test.fallback, test.minimum, test.maximum); got != test.want {
-				t.Errorf("parseBoundedInt() = %d, want %d", got, test.want)
-			}
-		})
 	}
 }
 

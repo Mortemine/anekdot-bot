@@ -9,4 +9,8 @@ var (
 	ErrInvalidInput = errors.New("invalid input")
 	// ErrUpstreamUnavailable reports that an external dependency failed.
 	ErrUpstreamUnavailable = errors.New("upstream unavailable")
+	// ErrConflict reports that the change collides with existing data.
+	ErrConflict = errors.New("conflict")
+	// ErrUnauthorized reports that the credentials or the session are not valid.
+	ErrUnauthorized = errors.New("unauthorized")
 )

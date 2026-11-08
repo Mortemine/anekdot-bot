@@ -6,8 +6,11 @@ interface AnekdotPanelProps {
   anekdot: Anekdot | null;
   loading: boolean;
   error: string | null;
+  canFavorite: boolean;
+  isFavorite: boolean;
   onSelectCategory: (categoryId: number | null) => void;
   onNext: () => void;
+  onToggleFavorite: () => void;
 }
 
 export function AnekdotPanel({
@@ -16,8 +19,11 @@ export function AnekdotPanel({
   anekdot,
   loading,
   error,
+  canFavorite,
+  isFavorite,
   onSelectCategory,
   onNext,
+  onToggleFavorite,
 }: AnekdotPanelProps) {
   const total = categories.reduce((sum, category) => sum + category.anekdot_count, 0);
   const activeCategory = categories.find((category) => category.id === selectedCategory);
@@ -74,6 +80,16 @@ export function AnekdotPanel({
           <footer className="anekdot-meta">
             <span className="badge">{anekdot.category_name}</span>
             <span className="muted">#{anekdot.id}</span>
+            <button
+              type="button"
+              className={isFavorite ? "button button-favorite favorite-active" : "button button-favorite"}
+              aria-pressed={isFavorite}
+              disabled={!canFavorite}
+              title={canFavorite ? undefined : "Войдите, чтобы сохранять анекдоты"}
+              onClick={onToggleFavorite}
+            >
+              {isFavorite ? "★ В избранном" : "☆ В избранное"}
+            </button>
           </footer>
         </article>
       )}

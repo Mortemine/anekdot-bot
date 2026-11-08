@@ -9,6 +9,7 @@ export interface Anekdot {
   category_id: number;
   category_name: string;
   text: string;
+  author_id?: number;
 }
 
 export interface ExternalAnekdot {
@@ -16,17 +17,15 @@ export interface ExternalAnekdot {
   source: string;
 }
 
-export type FeedbackStatus = "new" | "read" | "archived";
-
-export interface Feedback {
+export interface User {
   id: number;
-  message: string;
-  contact: string | null;
-  status: FeedbackStatus;
+  email: string;
+  display_name: string;
   created_at: string;
 }
 
-export interface Pagination {
-  limit: number;
-  offset: number;
+export interface AuthResult {
+  user: User;
+  token: string;
+  expires_at: string;
 }

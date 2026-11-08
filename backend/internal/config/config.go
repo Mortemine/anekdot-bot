@@ -21,7 +21,7 @@ const (
 	defaultDataDir         = "data"
 	defaultRequestTimeout  = 10 * time.Second
 	defaultShutdownTimeout = 15 * time.Second
-	minAdminTokenLength    = 16
+	defaultSessionTTL      = 30 * 24 * time.Hour
 
 	defaultDBMaxConns    int32 = 10
 	defaultDBMinConns    int32 = 2
@@ -37,7 +37,7 @@ type Config struct {
 	DBMinConns         int32
 	DBMaxConnLifetime  time.Duration
 	DBMaxConnIdleTime  time.Duration
-	AdminToken         string
+	SessionTTL         time.Duration
 	CORSOrigins        []string
 	TrustProxyHeaders  bool
 	WebDir             string
@@ -54,7 +54,6 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		HTTPAddr:           env("HTTP_ADDR", defaultHTTPAddr),
 		DatabaseURL:        env("DATABASE_URL", defaultDatabaseURL),
-		AdminToken:         strings.TrimSpace(os.Getenv("ADMIN_TOKEN")),
 		WebDir:             strings.TrimSpace(os.Getenv("WEB_DIR")),
 		DataDir:            env("DATA_DIR", defaultDataDir),
 		LogFormat:          strings.ToLower(env("LOG_FORMAT", "json")),
@@ -87,16 +86,14 @@ func Load() (*Config, error) {
 	if cfg.ShutdownTimeout, err = envDuration("SHUTDOWN_TIMEOUT", defaultShutdownTimeout); err != nil {
 		return nil, err
 	}
+	if cfg.SessionTTL, err = envDuration("SESSION_TTL", defaultSessionTTL); err != nil {
+		return nil, err
+	}
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
 
 	return cfg, nil
-}
-
-// AdminEnabled reports whether the admin API is configured.
-func (c *Config) AdminEnabled() bool {
-	return c.AdminToken != ""
 }
 
 func (c *Config) validate() error {
@@ -126,8 +123,8 @@ func (c *Config) validate() error {
 	if c.LogFormat != "json" && c.LogFormat != "text" {
 		return fmt.Errorf("config: LOG_FORMAT must be json or text")
 	}
-	if c.AdminToken != "" && len(c.AdminToken) < minAdminTokenLength {
-		return fmt.Errorf("config: ADMIN_TOKEN must be at least %d characters", minAdminTokenLength)
+	if c.SessionTTL <= 0 {
+		return fmt.Errorf("config: SESSION_TTL must be positive")
 	}
 
 	return nil

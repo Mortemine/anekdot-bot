@@ -1,6 +1,7 @@
-import type { Anekdot, Category, ExternalAnekdot, Feedback, Pagination } from "./types";
+import type { Anekdot, AuthResult, Category, ExternalAnekdot, User } from "./types";
 
 const apiBase = import.meta.env.VITE_API_BASE ?? "/api/v1";
+const tokenKey = "anekdot.token";
 
 interface ErrorBody {
   error?: {
@@ -21,10 +22,36 @@ export class ApiError extends Error {
   }
 }
 
+export function getToken(): string | null {
+  try {
+    return window.localStorage.getItem(tokenKey);
+  } catch {
+    return null;
+  }
+}
+
+export function setToken(token: string | null): void {
+  try {
+    if (token === null) {
+      window.localStorage.removeItem(tokenKey);
+      return;
+    }
+
+    window.localStorage.setItem(tokenKey, token);
+  } catch {
+    // Storage can be unavailable (private mode); the session then lasts for the page only.
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (init?.body !== undefined) {
     headers.set("Content-Type", "application/json");
+  }
+
+  const token = getToken();
+  if (token !== null) {
+    headers.set("Authorization", `Bearer ${token}`);
   }
 
   let response: Response;
@@ -57,16 +84,35 @@ export const api = {
 
   externalAnekdot: () => request<{ anekdot: ExternalAnekdot }>("/anekdots/external"),
 
-  submitFeedback: (message: string, contact: string) =>
-    request<{ feedback: Feedback }>("/feedback", {
+  register: (email: string, password: string, displayName: string) =>
+    request<AuthResult>("/auth/register", {
       method: "POST",
-      body: JSON.stringify({ message, contact }),
+      body: JSON.stringify({ email, password, display_name: displayName }),
     }),
 
-  listFeedback: (token: string) =>
-    request<{ feedback: Feedback[]; pagination: Pagination }>("/admin/feedback", {
-      headers: { "X-Admin-Token": token },
+  login: (email: string, password: string) =>
+    request<AuthResult>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
     }),
+
+  logout: () => request<void>("/auth/logout", { method: "POST" }),
+
+  me: () => request<{ user: User }>("/auth/me"),
+
+  createAnekdot: (categoryId: number, text: string) =>
+    request<{ anekdot: Anekdot }>("/anekdots", {
+      method: "POST",
+      body: JSON.stringify({ category_id: categoryId, text }),
+    }),
+
+  myAnekdots: () => request<{ anekdots: Anekdot[] }>("/anekdots/mine"),
+
+  listFavorites: () => request<{ anekdots: Anekdot[] }>("/favorites"),
+
+  addFavorite: (anekdotId: number) => request<void>(`/favorites/${anekdotId}`, { method: "PUT" }),
+
+  removeFavorite: (anekdotId: number) => request<void>(`/favorites/${anekdotId}`, { method: "DELETE" }),
 };
 
 export function errorMessage(error: unknown): string {

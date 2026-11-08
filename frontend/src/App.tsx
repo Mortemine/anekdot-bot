@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { api, errorMessage } from "./api";
-import { AdminPanel } from "./components/AdminPanel";
+import { api, errorMessage, getToken, setToken } from "./api";
+import { AccountPanel } from "./components/AccountPanel";
 import { AnekdotPanel } from "./components/AnekdotPanel";
 import { ExternalPanel } from "./components/ExternalPanel";
-import { FeedbackForm } from "./components/FeedbackForm";
-import type { Anekdot, Category } from "./types";
+import { FavoritesPanel } from "./components/FavoritesPanel";
+import { SubmitPanel } from "./components/SubmitPanel";
+import type { Anekdot, AuthResult, Category, User } from "./types";
 
-type Tab = "anekdots" | "external" | "feedback" | "admin";
+type Tab = "anekdots" | "external" | "favorites" | "submit" | "account";
 
 const tabs: ReadonlyArray<{ id: Tab; label: string }> = [
   { id: "anekdots", label: "Анекдоты" },
   { id: "external", label: "Случайный анекдот" },
-  { id: "feedback", label: "Связь с администрацией" },
-  { id: "admin", label: "Админка" },
+  { id: "favorites", label: "Избранное" },
+  { id: "submit", label: "Свой анекдот" },
+  { id: "account", label: "Аккаунт" },
 ];
 
 export default function App() {
@@ -23,6 +25,10 @@ export default function App() {
   const [anekdot, setAnekdot] = useState<Anekdot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [favorites, setFavorites] = useState<Anekdot[]>([]);
+  const [favoritesLoading, setFavoritesLoading] = useState(false);
+  const [favoritesError, setFavoritesError] = useState<string | null>(null);
   const latestRequest = useRef(0);
 
   const loadAnekdot = useCallback(async (categoryId: number | null) => {
@@ -47,6 +53,20 @@ export default function App() {
       if (requestId === latestRequest.current) {
         setLoading(false);
       }
+    }
+  }, []);
+
+  const loadFavorites = useCallback(async () => {
+    setFavoritesLoading(true);
+    setFavoritesError(null);
+
+    try {
+      const payload = await api.listFavorites();
+      setFavorites(payload.anekdots);
+    } catch (loadError) {
+      setFavoritesError(errorMessage(loadError));
+    } finally {
+      setFavoritesLoading(false);
     }
   }, []);
 
@@ -75,6 +95,94 @@ export default function App() {
     void loadAnekdot(selectedCategory);
   }, [loadAnekdot, selectedCategory]);
 
+  useEffect(() => {
+    if (getToken() === null) {
+      return;
+    }
+
+    let cancelled = false;
+
+    api
+      .me()
+      .then((payload) => {
+        if (!cancelled) {
+          setUser(payload.user);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setToken(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (user === null) {
+      setFavorites([]);
+      return;
+    }
+
+    void loadFavorites();
+  }, [user, loadFavorites]);
+
+  const handleAuthenticated = useCallback((result: AuthResult) => {
+    setToken(result.token);
+    setUser(result.user);
+    setTab("anekdots");
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await api.logout();
+    } catch {
+      // The session is dropped locally even if the server already forgot it.
+    }
+
+    setToken(null);
+    setUser(null);
+    setFavorites([]);
+  }, []);
+
+  const handleToggleFavorite = useCallback(async () => {
+    if (user === null || anekdot === null) {
+      return;
+    }
+
+    const saved = favorites.some((item) => item.id === anekdot.id);
+    setFavoritesError(null);
+
+    try {
+      if (saved) {
+        await api.removeFavorite(anekdot.id);
+      } else {
+        await api.addFavorite(anekdot.id);
+      }
+      await loadFavorites();
+    } catch (favoriteError) {
+      setFavoritesError(errorMessage(favoriteError));
+    }
+  }, [anekdot, favorites, loadFavorites, user]);
+
+  const handleRemoveFavorite = useCallback(
+    async (target: Anekdot) => {
+      setFavoritesError(null);
+
+      try {
+        await api.removeFavorite(target.id);
+        await loadFavorites();
+      } catch (favoriteError) {
+        setFavoritesError(errorMessage(favoriteError));
+      }
+    },
+    [loadFavorites],
+  );
+
+  const isCurrentFavorite = anekdot !== null && favorites.some((item) => item.id === anekdot.id);
+
   return (
     <div className="app">
       <header className="app-header">
@@ -84,9 +192,12 @@ export default function App() {
           </span>
           <div>
             <h1>Анекдот Бот</h1>
-            <p className="muted">Анекдоты по категориям, случайный анекдот и обратная связь</p>
+            <p className="muted">
+              Анекдоты по категориям, случайный анекдот, избранное и свои анекдоты
+            </p>
           </div>
         </div>
+        <p className="muted session">{user === null ? "Гость" : `${user.display_name} · ${user.email}`}</p>
       </header>
 
       <nav className="tabs" aria-label="Разделы">
@@ -110,16 +221,40 @@ export default function App() {
             selectedCategory={selectedCategory}
             anekdot={anekdot}
             loading={loading}
-            error={error}
+            error={error ?? favoritesError}
+            canFavorite={user !== null}
+            isFavorite={isCurrentFavorite}
             onSelectCategory={setSelectedCategory}
             onNext={() => {
               void loadAnekdot(selectedCategory);
             }}
+            onToggleFavorite={() => {
+              void handleToggleFavorite();
+            }}
           />
         )}
         {tab === "external" && <ExternalPanel />}
-        {tab === "feedback" && <FeedbackForm />}
-        {tab === "admin" && <AdminPanel />}
+        {tab === "favorites" && (
+          <FavoritesPanel
+            user={user}
+            favorites={favorites}
+            loading={favoritesLoading}
+            error={favoritesError}
+            onRemove={(target) => {
+              void handleRemoveFavorite(target);
+            }}
+          />
+        )}
+        {tab === "submit" && <SubmitPanel categories={categories} user={user} />}
+        {tab === "account" && (
+          <AccountPanel
+            user={user}
+            onAuthenticated={handleAuthenticated}
+            onLogout={() => {
+              void handleLogout();
+            }}
+          />
+        )}
       </main>
 
       <footer className="app-footer">

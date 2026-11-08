@@ -43,6 +43,10 @@ func writeDomainError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "not_found", "Ничего не найдено.")
 	case errors.Is(err, domain.ErrInvalidInput):
 		writeError(w, http.StatusBadRequest, "invalid_input", "Проверьте введённые данные.")
+	case errors.Is(err, domain.ErrUnauthorized):
+		writeError(w, http.StatusUnauthorized, "unauthorized", "Неверная почта или пароль.")
+	case errors.Is(err, domain.ErrConflict):
+		writeError(w, http.StatusConflict, "conflict", "Такая запись уже есть.")
 	case errors.Is(err, domain.ErrUpstreamUnavailable):
 		writeError(w, http.StatusBadGateway, "upstream_unavailable", "Внешний источник анекдотов сейчас недоступен.")
 	default:
@@ -53,5 +57,7 @@ func writeDomainError(w http.ResponseWriter, err error) {
 func isExpectedError(err error) bool {
 	return errors.Is(err, domain.ErrNotFound) ||
 		errors.Is(err, domain.ErrInvalidInput) ||
+		errors.Is(err, domain.ErrUnauthorized) ||
+		errors.Is(err, domain.ErrConflict) ||
 		errors.Is(err, domain.ErrUpstreamUnavailable)
 }

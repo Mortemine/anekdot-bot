@@ -3,9 +3,8 @@ package httpapi
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -16,6 +15,9 @@ import (
 	"time"
 
 	"golang.org/x/time/rate"
+
+	"github.com/alexey/anekdot-bot/backend/internal/domain"
+	"github.com/alexey/anekdot-bot/backend/internal/usecase"
 )
 
 type contextKey string
@@ -222,28 +224,51 @@ func corsMiddleware(origins []string) func(http.Handler) http.Handler {
 	}
 }
 
-func requireAdmin(token string) func(http.Handler) http.Handler {
-	expected := sha256.Sum256([]byte(token))
-	unauthorized := func(w http.ResponseWriter) {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="admin"`)
-		writeError(w, http.StatusUnauthorized, "unauthorized", "Требуется токен администратора.")
+type userContextKey struct{}
+
+// UserFromContext returns the user attached by authMiddleware.
+func UserFromContext(ctx context.Context) (domain.User, bool) {
+	user, ok := ctx.Value(userContextKey{}).(domain.User)
+
+	return user, ok
+}
+
+// bearerToken extracts the token from the Authorization header.
+func bearerToken(r *http.Request) string {
+	const prefix = "bearer "
+
+	header := r.Header.Get("Authorization")
+	if len(header) <= len(prefix) || !strings.EqualFold(header[:len(prefix)], prefix) {
+		return ""
 	}
 
+	return strings.TrimSpace(header[len(prefix):])
+}
+
+// authMiddleware resolves the session token and attaches the user to the request.
+func authMiddleware(service *usecase.AuthService, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			provided := r.Header.Get("X-Admin-Token")
-			if provided == "" {
-				provided = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-			}
+			user, err := service.Authenticate(r.Context(), bearerToken(r))
+			if err != nil {
+				if !errors.Is(err, domain.ErrUnauthorized) {
+					logger.ErrorContext(
+						r.Context(),
+						"session lookup failed",
+						"error", err,
+						"request_id", requestIDFromContext(r.Context()),
+					)
+				}
 
-			received := sha256.Sum256([]byte(strings.TrimSpace(provided)))
-			if subtle.ConstantTimeCompare(received[:], expected[:]) != 1 {
-				unauthorized(w)
+				w.Header().Set("WWW-Authenticate", `Bearer realm="anekdot"`)
+				writeError(w, http.StatusUnauthorized, "unauthorized", "Требуется вход в аккаунт.")
 
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			ctx := context.WithValue(r.Context(), userContextKey{}, user)
+
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

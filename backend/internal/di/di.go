@@ -39,8 +39,14 @@ func New(cfg *config.Config, logger *slog.Logger) (*do.RootScope, error) {
 	do.Provide(injector, func(i do.Injector) (domain.AnekdotRepository, error) {
 		return postgres.NewAnekdotRepository(do.MustInvoke[*pgxpool.Pool](i)), nil
 	})
-	do.Provide(injector, func(i do.Injector) (domain.FeedbackRepository, error) {
-		return postgres.NewFeedbackRepository(do.MustInvoke[*pgxpool.Pool](i)), nil
+	do.Provide(injector, func(i do.Injector) (domain.UserRepository, error) {
+		return postgres.NewUserRepository(do.MustInvoke[*pgxpool.Pool](i)), nil
+	})
+	do.Provide(injector, func(i do.Injector) (domain.SessionRepository, error) {
+		return postgres.NewSessionRepository(do.MustInvoke[*pgxpool.Pool](i)), nil
+	})
+	do.Provide(injector, func(i do.Injector) (domain.FavoriteRepository, error) {
+		return postgres.NewFavoriteRepository(do.MustInvoke[*pgxpool.Pool](i)), nil
 	})
 
 	do.Provide(injector, func(i do.Injector) (domain.ExternalAnekdotSource, error) {
@@ -57,12 +63,18 @@ func New(cfg *config.Config, logger *slog.Logger) (*do.RootScope, error) {
 		return usecase.NewAnekdotService(
 			do.MustInvoke[domain.CategoryRepository](i),
 			do.MustInvoke[domain.AnekdotRepository](i),
+			do.MustInvoke[domain.FavoriteRepository](i),
 			do.MustInvoke[domain.ExternalAnekdotSource](i),
 			do.MustInvoke[*slog.Logger](i),
 		), nil
 	})
-	do.Provide(injector, func(i do.Injector) (*usecase.FeedbackService, error) {
-		return usecase.NewFeedbackService(do.MustInvoke[domain.FeedbackRepository](i)), nil
+	do.Provide(injector, func(i do.Injector) (*usecase.AuthService, error) {
+		return usecase.NewAuthService(
+			do.MustInvoke[domain.UserRepository](i),
+			do.MustInvoke[domain.SessionRepository](i),
+			do.MustInvoke[*config.Config](i).SessionTTL,
+			do.MustInvoke[*slog.Logger](i),
+		), nil
 	})
 
 	do.Provide(injector, func(i do.Injector) (http.Handler, error) {
@@ -70,7 +82,7 @@ func New(cfg *config.Config, logger *slog.Logger) (*do.RootScope, error) {
 			do.MustInvoke[*config.Config](i),
 			do.MustInvoke[*slog.Logger](i),
 			do.MustInvoke[*usecase.AnekdotService](i),
-			do.MustInvoke[*usecase.FeedbackService](i),
+			do.MustInvoke[*usecase.AuthService](i),
 			do.MustInvoke[*pgxpool.Pool](i),
 		)
 	})

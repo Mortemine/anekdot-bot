@@ -4,7 +4,6 @@ GO            ?= go
 DATABASE_URL  ?= postgres://anekdot:anekdot@localhost:5432/anekdot?sslmode=disable
 DATA_DIR      ?= ../data
 WEB_DIR       ?= web
-ADMIN_TOKEN   ?=
 BIN_DIR       := bin
 
 .PHONY: help build run test lint fmt vet tidy migrate-up migrate-down seed frontend-install frontend-build frontend-dev clean
@@ -30,7 +29,7 @@ build:
 	$(GO) build -trimpath -ldflags="-s -w" -o $(BIN_DIR)/seed ./cmd/seed
 
 run:
-	env DATABASE_URL="$(DATABASE_URL)" DATA_DIR="$(DATA_DIR)" WEB_DIR="$(WEB_DIR)" ADMIN_TOKEN="$(ADMIN_TOKEN)" $(GO) run ./cmd/api
+	env DATABASE_URL="$(DATABASE_URL)" DATA_DIR="$(DATA_DIR)" WEB_DIR="$(WEB_DIR)" $(GO) run ./cmd/api
 
 test:
 	$(GO) test ./...

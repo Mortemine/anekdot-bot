@@ -366,7 +366,7 @@ h2 {
   resize: vertical;
 }
 
-.feedback-list {
+.anekdot-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -375,29 +375,69 @@ h2 {
   list-style: none;
 }
 
-.feedback-item {
+.anekdot-item {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
 }
 
-.feedback-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.feedback-text {
+.anekdot-item-text {
   margin: 0;
   white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.button-favorite {
+  margin-left: auto;
+}
+
+.favorite-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.segmented {
+  display: flex;
+  gap: 8px;
+}
+
+.section-title {
+  margin: 8px 0 0;
+  font-size: 18px;
+}
+
+.profile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.profile-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.profile-row dt {
+  color: var(--muted);
+}
+
+.profile-row dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.session {
+  text-align: right;
   overflow-wrap: anywhere;
 }
 

@@ -16,31 +16,41 @@ type CategorySummary struct {
 }
 
 // Anekdot is a single joke.
+//
+// AuthorID is nil for anecdotes that come from the imported archive; it points
+// to the registered user who submitted the anecdote otherwise.
 type Anekdot struct {
 	ID           int64
 	CategoryID   int
 	CategoryName string
 	Text         string
+	AuthorID     *int64
 	CreatedAt    time.Time
 }
 
-// FeedbackStatus describes the moderation state of a feedback message.
-type FeedbackStatus string
+// User is a registered reader who can keep favorites and publish anecdotes.
+type User struct {
+	ID          int64
+	Email       string
+	DisplayName string
+	CreatedAt   time.Time
+}
 
-const (
-	// FeedbackStatusNew marks a message nobody has reviewed yet.
-	FeedbackStatusNew FeedbackStatus = "new"
-	// FeedbackStatusRead marks a reviewed message.
-	FeedbackStatusRead FeedbackStatus = "read"
-	// FeedbackStatusArchived marks a message moved out of the inbox.
-	FeedbackStatusArchived FeedbackStatus = "archived"
-)
+// Credentials is a user together with the stored password hash.
+//
+// It exists so the hash never travels through the layers that only need to
+// identify a user.
+type Credentials struct {
+	User
+	PasswordHash string
+}
 
-// Feedback is a message sent to the administration through the contact form.
-type Feedback struct {
-	ID        int64
-	Message   string
-	Contact   *string
-	Status    FeedbackStatus
-	CreatedAt time.Time
+// Session is a bearer token issued after a successful login.
+//
+// Only the hash of the token is ever stored, so a database leak does not hand
+// out usable credentials.
+type Session struct {
+	TokenHash string
+	UserID    int64
+	ExpiresAt time.Time
 }
