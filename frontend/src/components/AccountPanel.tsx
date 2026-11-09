@@ -114,7 +114,7 @@ export function AccountPanel({ user, onAuthenticated, onLogout }: AccountPanelPr
         </p>
       )}
 
-      <form className="form" onSubmit={submit}>
+      <form className="form form-narrow" onSubmit={submit}>
         <label className="field">
           <span className="field-label">Почта</span>
           <input

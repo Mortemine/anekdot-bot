@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import type { Category, CategorySort } from "../types";
+import { IconChevronsUpDown } from "./Icons";
 
 interface Props {
   categories: Category[];
@@ -43,9 +44,9 @@ export function CategorySidebar({ categories, selectedCategory, onSelect }: Prop
     <aside className="sidebar">
       <div className="sidebar-header">
         <h2 className="sidebar-title">Категории</h2>
-        <label className="category-sort" title="Сортировка категорий">
+        <label className="sort-control" title="Сортировка категорий">
           <span className="sort-icon" aria-hidden="true">
-            ⇅
+            <IconChevronsUpDown />
           </span>
           <select
             className="sort-select"

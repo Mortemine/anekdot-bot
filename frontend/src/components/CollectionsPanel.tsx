@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import { api, errorMessage } from "../api";
 import { formatDate } from "../format";
 import type { Collection, CollectionDetail, CollectionSection, User } from "../types";
+import { IconBookmark } from "./Icons";
 
 interface Props {
   user: User | null;
@@ -356,7 +357,7 @@ export function CollectionsPanel({
                         void handleToggleCollectionFavorite(collection);
                       }}
                     >
-                      <span aria-hidden="true">★</span>
+                      <IconBookmark filled />
                       <span>В избранном</span>
                     </button>
                   </div>
@@ -411,7 +412,7 @@ export function CollectionsPanel({
                             void handleToggleCollectionFavorite({ ...collection, favorited: favored });
                           }}
                         >
-                          <span aria-hidden="true">{favored ? "★" : "☆"}</span>
+                          <IconBookmark filled={favored} />
                           <span>{favored ? "В избранном" : "В избранное"}</span>
                         </button>
                       </div>

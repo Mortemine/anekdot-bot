@@ -7,6 +7,7 @@ import { CategorySidebar } from "./components/CategorySidebar";
 import { CollectionsPanel } from "./components/CollectionsPanel";
 import { CollectionsSidebar } from "./components/CollectionsSidebar";
 import { ExternalPanel } from "./components/ExternalPanel";
+import { IconUser } from "./components/Icons";
 import { SavedPanel } from "./components/SavedPanel";
 import { SubmitPanel } from "./components/SubmitPanel";
 import type {
@@ -23,12 +24,11 @@ type Tab = "anekdots" | "external" | "likes" | "favorites" | "collections" | "su
 
 const tabs: ReadonlyArray<{ id: Tab; label: string }> = [
   { id: "anekdots", label: "Анекдоты" },
-  { id: "external", label: "Случайный анекдот" },
+  { id: "external", label: "Случайный" },
   { id: "likes", label: "Понравившиеся" },
   { id: "favorites", label: "Избранное" },
   { id: "collections", label: "Коллекции" },
-  { id: "submit", label: "Мои анекдоты" },
-  { id: "account", label: "Аккаунт" },
+  { id: "submit", label: "Мои" },
 ];
 
 const pageSizes = [10, 20, 40, 100] as const;
@@ -452,19 +452,32 @@ export default function App() {
 
   const selectedCategoryName = categories.find((category) => category.id === selectedCategory)?.name ?? "Все анекдоты";
   const hasSidebar = tab === "anekdots" || tab === "collections";
+  const accountInitial =
+    user === null ? "" : (user.display_name.trim() || user.email).slice(0, 1).toUpperCase();
+  const accountTitle = user === null ? "Гость" : user.display_name;
+  const accountHint = user === null ? "Войти или зарегистрироваться" : user.email;
 
   return (
     <div className="app">
       <header className="app-header">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            😂
-          </span>
-          <div>
-            <h1>anekdotus</h1>
-          </div>
+          <h1>anekdotus</h1>
+          <p className="brand-tagline muted">Анекдоты на каждый день</p>
         </div>
-        <p className="muted session">{user === null ? "Гость" : `${user.display_name} · ${user.email}`}</p>
+        <button
+          type="button"
+          className={tab === "account" ? "account-chip account-chip-active" : "account-chip"}
+          aria-current={tab === "account" ? "page" : undefined}
+          onClick={() => setTab("account")}
+        >
+          <span className="account-chip-avatar" aria-hidden="true">
+            {accountInitial === "" ? <IconUser /> : accountInitial}
+          </span>
+          <span className="account-chip-copy">
+            <span className="account-chip-name">{accountTitle}</span>
+            <span className="account-chip-hint">{accountHint}</span>
+          </span>
+        </button>
       </header>
 
       <nav className="tabs" aria-label="Разделы">

@@ -2,6 +2,14 @@ import { useState } from "react";
 
 import type { Anekdot, AnekdotSort, Collection } from "../types";
 import { formatDate } from "../format";
+import {
+  IconBookmark,
+  IconChevronLeft,
+  IconChevronRight,
+  IconChevronsUpDown,
+  IconFolderPlus,
+  IconHeart,
+} from "./Icons";
 
 export interface AnekdotPaging {
   page: number;
@@ -82,7 +90,7 @@ export function AnekdotListPanel({
           <p className="control-summary muted">Всего анекдотов: {paging.total}</p>
           <label className="sort-control" title="Сортировка">
             <span className="sort-icon" aria-hidden="true">
-              ⇅
+              <IconChevronsUpDown />
             </span>
             <select
               className="sort-select"
@@ -137,8 +145,8 @@ export function AnekdotListPanel({
                     disabled={disabled}
                     onClick={() => onToggleFavorite(item)}
                   >
-                    <span aria-hidden="true">{favorite ? "★" : "☆"}</span>
-                    <span className="like-count">{item.favorite_count}</span>
+                    <IconBookmark filled={favorite} />
+                    {item.favorite_count > 0 && <span className="like-count">{item.favorite_count}</span>}
                   </button>
                   {canReact && onAddToCollection !== undefined && (
                     <button
@@ -153,7 +161,7 @@ export function AnekdotListPanel({
                       disabled={disabled || collections.length === 0}
                       onClick={() => setPickerID(pickerID === item.id ? null : item.id)}
                     >
-                      <span aria-hidden="true">🗂</span>
+                      <IconFolderPlus />
                       <span>В коллекцию</span>
                     </button>
                   )}
@@ -166,8 +174,8 @@ export function AnekdotListPanel({
                     disabled={disabled}
                     onClick={() => onToggleLike(item)}
                   >
-                    <span aria-hidden="true">{liked ? "♥" : "♡"}</span>
-                    <span className="like-count">{item.like_count}</span>
+                    <IconHeart filled={liked} />
+                    {item.like_count > 0 && <span className="like-count">{item.like_count}</span>}
                   </button>
                 </div>
                 {pickerID === item.id && onAddToCollection !== undefined && (
@@ -206,11 +214,13 @@ export function AnekdotListPanel({
             <nav className="pagination" aria-label="Постраничная навигация">
               <button
                 type="button"
-                className="page-button"
+                className="page-button page-button-nav"
+                aria-label="Предыдущая страница"
+                title="Предыдущая страница"
                 disabled={loading || paging.page <= 1}
                 onClick={() => paging.onPageChange(paging.page - 1)}
               >
-                Назад
+                <IconChevronLeft />
               </button>
               {pages.map((number) => (
                 <button
@@ -226,11 +236,13 @@ export function AnekdotListPanel({
               ))}
               <button
                 type="button"
-                className="page-button"
+                className="page-button page-button-nav"
+                aria-label="Следующая страница"
+                title="Следующая страница"
                 disabled={loading || paging.page >= totalPages}
                 onClick={() => paging.onPageChange(paging.page + 1)}
               >
-                Вперёд
+                <IconChevronRight />
               </button>
               <span className="pagination-status muted">
                 Страница {paging.page} из {totalPages}

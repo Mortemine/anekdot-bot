@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api, errorMessage } from "../api";
 import type { ExternalAnekdot, User } from "../types";
+import { IconHeart } from "./Icons";
 
 interface Props {
   user: User | null;
@@ -97,7 +98,7 @@ export function ExternalPanel({ user, onSaved }: Props) {
                   void save();
                 }}
               >
-                <span aria-hidden="true">{saved ? "♥" : "♡"}</span>
+                <IconHeart filled={saved} />
                 <span>{saving ? "Сохраняем…" : "В понравившиеся"}</span>
               </button>
             </div>
