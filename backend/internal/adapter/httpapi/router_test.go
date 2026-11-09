@@ -52,6 +52,8 @@ type anekdotStub struct {
 	byCategoryErr      error
 	counts             map[int]int
 	countsErr          error
+	popularity         map[int]int
+	popularityErr      error
 	receivedCategoryID int
 	byCategoryCalled   bool
 
@@ -88,7 +90,15 @@ func (s *anekdotStub) CountsByCategory(context.Context) (map[int]int, error) {
 	return s.counts, s.countsErr
 }
 
+func (s *anekdotStub) PopularityByCategory(context.Context) (map[int]int, error) {
+	return s.popularity, s.popularityErr
+}
+
 func (s *anekdotStub) ByID(context.Context, int64) (domain.Anekdot, error) {
+	return s.byID, s.byIDErr
+}
+
+func (s *anekdotStub) ByText(context.Context, int, string) (domain.Anekdot, error) {
 	return s.byID, s.byIDErr
 }
 
@@ -1516,6 +1526,20 @@ func TestCORS(t *testing.T) {
 	})
 }
 
+func TestCORSAllowsEveryOriginWhenWildcardConfigured(t *testing.T) {
+	f := newFixture()
+	f.cfg.CORSOrigins = []string{"*", "http://localhost:5173"}
+	handler := f.handler(t)
+
+	recorder := perform(t, handler, http.MethodGet, "/api/v1/categories", nil, map[string]string{
+		"Origin": "https://example.com",
+	})
+
+	if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want *", got)
+	}
+}
+
 func TestSPAFallback(t *testing.T) {
 	directory := t.TempDir()
 	writeFile(t, filepath.Join(directory, "index.html"), "<html>spa-index</html>")
@@ -1576,6 +1600,93 @@ func TestRecovererMiddleware(t *testing.T) {
 	}
 }
 
+func TestRecovererMiddlewareHandlesErrorPayload(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler := chain(
+		http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			panic(errors.New("boom"))
+		}),
+		recovererMiddleware(logger),
+	)
+
+	recorder := perform(t, handler, http.MethodGet, "/panic-error", nil, nil)
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", recorder.Code)
+	}
+}
+
+func TestRecovererMiddlewareRethrowsAbortHandler(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler := chain(
+		http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			panic(http.ErrAbortHandler)
+		}),
+		recovererMiddleware(logger),
+	)
+
+	defer func() {
+		recovered := recover()
+
+		aborted, isError := recovered.(error)
+		if !isError || !errors.Is(aborted, http.ErrAbortHandler) {
+			t.Fatalf("recovered = %v, want ErrAbortHandler", recovered)
+		}
+	}()
+
+	perform(t, handler, http.MethodGet, "/abort", nil, nil)
+
+	t.Fatal("recoverer swallowed ErrAbortHandler")
+}
+
+func TestAuthMiddlewareLogsStorageFailures(t *testing.T) {
+	run := func(t *testing.T, lookupErr error) (*httptest.ResponseRecorder, string) {
+		t.Helper()
+
+		f := newFixture()
+		f.sessions.lookupErr = lookupErr
+
+		var logs strings.Builder
+
+		logger := slog.New(slog.NewTextHandler(&logs, nil))
+		service := usecase.NewAuthService(f.users, f.sessions, f.cfg.SessionTTL, logger)
+		handler := authMiddleware(service, logger)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			t.Fatal("the guarded handler must not run")
+		}))
+
+		request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/likes", nil)
+		request.Header.Set("Authorization", "Bearer some-token")
+		recorder := httptest.NewRecorder()
+
+		handler.ServeHTTP(recorder, request)
+
+		return recorder, logs.String()
+	}
+
+	t.Run("storage failure is logged", func(t *testing.T) {
+		recorder, logs := run(t, errors.New("database is down"))
+
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401", recorder.Code)
+		}
+
+		if !strings.Contains(logs, "session lookup failed") {
+			t.Fatalf("storage failure was not logged: %s", logs)
+		}
+	})
+
+	t.Run("unknown session stays silent", func(t *testing.T) {
+		recorder, logs := run(t, nil)
+
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401", recorder.Code)
+		}
+
+		if logs != "" {
+			t.Fatalf("anonymous request produced logs: %s", logs)
+		}
+	})
+}
+
 func TestClientIP(t *testing.T) {
 	request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	request.RemoteAddr = "10.0.0.5:1234"
@@ -1586,6 +1697,26 @@ func TestClientIP(t *testing.T) {
 	}
 	if got := clientIP(request, true); got != "203.0.113.7" {
 		t.Errorf("clientIP(trust=true) = %q, want 203.0.113.7", got)
+	}
+}
+
+func TestClientIPFallsBackToRemoteAddr(t *testing.T) {
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	request.RemoteAddr = "unix-socket"
+
+	if got := clientIP(request, false); got != "unix-socket" {
+		t.Fatalf("clientIP = %q, want unix-socket", got)
+	}
+}
+
+func TestClientIPUsesRealIPHeader(t *testing.T) {
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	request.RemoteAddr = "10.0.0.5:1234"
+	request.Header.Set("X-Forwarded-For", " , ")
+	request.Header.Set("X-Real-IP", "  198.51.100.9  ")
+
+	if got := clientIP(request, true); got != "198.51.100.9" {
+		t.Fatalf("clientIP = %q, want 198.51.100.9", got)
 	}
 }
 
@@ -1743,6 +1874,58 @@ func TestCollectionsAnekdots(t *testing.T) {
 	)
 	if foreignUpdate.Code != http.StatusForbidden {
 		t.Errorf("stranger update status = %d, want 403", foreignUpdate.Code)
+	}
+}
+
+func TestCollectionsRemoveAnekdot(t *testing.T) {
+	f := newFixture()
+	handler := f.handler(t)
+
+	owner := f.token(t, handler)
+	created := createCollection(t, handler, owner, "Прочитать")
+	target := fmt.Sprintf("/api/v1/collections/%d/anekdots/4", created.ID)
+
+	added := perform(t, handler, http.MethodPut, target, nil, bearer(owner))
+	if added.Code != http.StatusNoContent {
+		t.Fatalf("add status = %d, want 204: %s", added.Code, added.Body.String())
+	}
+
+	removed := perform(t, handler, http.MethodDelete, target, nil, bearer(owner))
+	if removed.Code != http.StatusNoContent {
+		t.Fatalf("remove status = %d, want 204: %s", removed.Code, removed.Body.String())
+	}
+
+	detail := perform(t, handler, http.MethodGet, fmt.Sprintf("/api/v1/collections/%d", created.ID), nil, bearer(owner))
+	payload := decodeBody[collectionDetailResponse](t, detail)
+
+	if len(payload.Anekdots) != 0 {
+		t.Errorf("anekdots after removal = %+v", payload.Anekdots)
+	}
+
+	if payload.Collection.AnekdotCount != 0 {
+		t.Errorf("collection = %+v", payload.Collection)
+	}
+}
+
+func TestCollectionsAnekdotsRejectBadIDs(t *testing.T) {
+	f := newFixture()
+	handler := f.handler(t)
+
+	owner := f.token(t, handler)
+	created := createCollection(t, handler, owner, "Прочитать")
+
+	for _, bad := range []string{
+		"/api/v1/collections/abc/anekdots/4",
+		"/api/v1/collections/0/anekdots/4",
+		fmt.Sprintf("/api/v1/collections/%d/anekdots/abc", created.ID),
+		fmt.Sprintf("/api/v1/collections/%d/anekdots/-1", created.ID),
+	} {
+		for _, method := range []string{http.MethodPut, http.MethodDelete} {
+			recorder := perform(t, handler, method, bad, nil, bearer(owner))
+			if recorder.Code != http.StatusBadRequest {
+				t.Errorf("%s %s status = %d, want 400", method, bad, recorder.Code)
+			}
+		}
 	}
 }
 

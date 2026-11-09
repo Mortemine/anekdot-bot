@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +26,7 @@ func TestNewBaneksSourceRejectsInvalidURL(t *testing.T) {
 		{name: "empty", url: ""},
 		{name: "wrong scheme", url: "ftp://example.com/random"},
 		{name: "missing host", url: "https://"},
+		{name: "unparsable", url: "http://[::1]:namedport/random"},
 	}
 
 	for _, test := range tests {
@@ -74,6 +76,18 @@ func TestBaneksSourceRandom(t *testing.T) {
 			body:    `<p>   </p>`,
 			wantErr: domain.ErrUpstreamUnavailable,
 		},
+		{
+			name:   "largest allowed body",
+			status: http.StatusOK,
+			body:   `<p>` + strings.Repeat("a", maxResponseBytes-7) + `</p>`,
+			want:   strings.Repeat("a", maxResponseBytes-7),
+		},
+		{
+			name:    "body too large",
+			status:  http.StatusOK,
+			body:    `<p>` + strings.Repeat("a", maxResponseBytes) + `</p>`,
+			wantErr: domain.ErrUpstreamUnavailable,
+		},
 	}
 
 	for _, test := range tests {
@@ -104,6 +118,22 @@ func TestBaneksSourceRandom(t *testing.T) {
 				t.Errorf("Random() = %q, want %q", text, test.want)
 			}
 		})
+	}
+}
+
+func TestNewBaneksSourceEnablesHTTP2(t *testing.T) {
+	source, err := NewBaneksSource("https://baneks.example", time.Second, discardLogger())
+	if err != nil {
+		t.Fatalf("NewBaneksSource() error = %v", err)
+	}
+
+	transport, ok := source.client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("transport = %T, want *http.Transport", source.client.Transport)
+	}
+
+	if !transport.ForceAttemptHTTP2 {
+		t.Fatal("ForceAttemptHTTP2 = false, want true")
 	}
 }
 

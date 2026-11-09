@@ -30,21 +30,23 @@ func (s *categoryRepositoryStub) Get(ctx context.Context, id int) (domain.Catego
 }
 
 type anekdotRepositoryStub struct {
-	listed       []domain.Anekdot
-	listErr      error
-	byID         *domain.Anekdot
-	byIDErr      error
-	created      domain.Anekdot
-	createErr    error
-	createdWith  domain.Anekdot
-	counts       map[int]int
-	countsErr    error
-	receivedCat  *int
-	receivedLim  int
-	receivedOff  int
-	receivedSort domain.AnekdotSort
-	total        int
-	countErr     error
+	listed        []domain.Anekdot
+	listErr       error
+	byID          *domain.Anekdot
+	byIDErr       error
+	created       domain.Anekdot
+	createErr     error
+	createdWith   domain.Anekdot
+	counts        map[int]int
+	countsErr     error
+	popularity    map[int]int
+	popularityErr error
+	receivedCat   *int
+	receivedLim   int
+	receivedOff   int
+	receivedSort  domain.AnekdotSort
+	total         int
+	countErr      error
 }
 
 func (s *anekdotRepositoryStub) Random(ctx context.Context) (domain.Anekdot, error) {
@@ -65,11 +67,27 @@ func (s *anekdotRepositoryStub) CountsByCategory(ctx context.Context) (map[int]i
 	return s.counts, s.countsErr
 }
 
+func (s *anekdotRepositoryStub) PopularityByCategory(ctx context.Context) (map[int]int, error) {
+	return s.popularity, s.popularityErr
+}
+
 func (s *anekdotRepositoryStub) ByID(ctx context.Context, id int64) (domain.Anekdot, error) {
 	if s.byIDErr != nil {
 		return domain.Anekdot{}, s.byIDErr
 	}
 
+	if s.byID == nil {
+		return domain.Anekdot{}, domain.ErrNotFound
+	}
+
+	return *s.byID, nil
+}
+
+func (s *anekdotRepositoryStub) ByText(
+	ctx context.Context,
+	categoryID int,
+	text string,
+) (domain.Anekdot, error) {
 	if s.byID == nil {
 		return domain.Anekdot{}, domain.ErrNotFound
 	}
@@ -206,7 +224,10 @@ func newTestService(deps serviceDeps) *AnekdotService {
 func TestAnekdotServiceListCategories(t *testing.T) {
 	t.Run("lists categories", func(t *testing.T) {
 		categories := &categoryRepositoryStub{items: []domain.Category{{ID: 1, Name: "Работа"}}}
-		anekdots := &anekdotRepositoryStub{counts: map[int]int{1: 3}}
+		anekdots := &anekdotRepositoryStub{
+			counts:     map[int]int{1: 3},
+			popularity: map[int]int{1: 7},
+		}
 		service := newTestService(serviceDeps{categories: categories, anekdots: anekdots})
 
 		got, err := service.ListCategories(context.Background())
@@ -214,7 +235,7 @@ func TestAnekdotServiceListCategories(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if len(got) != 1 || got[0].Name != "Работа" || got[0].AnekdotCount != 3 {
+		if len(got) != 1 || got[0].Name != "Работа" || got[0].AnekdotCount != 3 || got[0].Popularity != 7 {
 			t.Fatalf("unexpected categories: %+v", got)
 		}
 	})
@@ -420,6 +441,100 @@ func TestAnekdotServiceExternal(t *testing.T) {
 		service := newTestService(serviceDeps{external: &externalSourceStub{err: errors.New("boom")}})
 
 		if _, err := service.External(context.Background()); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+}
+
+func TestAnekdotServiceSaveExternal(t *testing.T) {
+	t.Run("stores and likes the anecdote", func(t *testing.T) {
+		anekdots := &anekdotRepositoryStub{created: domain.Anekdot{ID: 77, Text: "внешний анекдот"}}
+		likes := &reactionRepositoryStub{}
+		service := newTestService(serviceDeps{anekdots: anekdots, likes: likes})
+
+		saved, err := service.SaveExternal(context.Background(), 4, "  внешний анекдот  ")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if saved.ID != 77 {
+			t.Fatalf("unexpected result: %+v", saved)
+		}
+
+		if anekdots.createdWith.CategoryID != externalCategoryID {
+			t.Fatalf("unexpected category: %d", anekdots.createdWith.CategoryID)
+		}
+
+		if anekdots.createdWith.Text != "внешний анекдот" {
+			t.Fatalf("unexpected text: %q", anekdots.createdWith.Text)
+		}
+
+		if len(likes.added) != 1 || likes.added[0] != 77 || likes.receivedUserID != 4 {
+			t.Fatalf("unexpected like call: %+v", likes)
+		}
+	})
+
+	t.Run("rejects short text", func(t *testing.T) {
+		anekdots := &anekdotRepositoryStub{}
+		service := newTestService(serviceDeps{anekdots: anekdots})
+
+		_, err := service.SaveExternal(context.Background(), 1, "коротко")
+		if !errors.Is(err, domain.ErrInvalidInput) {
+			t.Fatalf("expected invalid input, got %v", err)
+		}
+
+		if anekdots.createdWith.Text != "" {
+			t.Fatalf("anecdote was stored: %+v", anekdots.createdWith)
+		}
+	})
+}
+
+func TestAnekdotServiceSaveExternalErrors(t *testing.T) {
+	t.Run("falls back to the existing anecdote", func(t *testing.T) {
+		existing := domain.Anekdot{ID: 9, Text: "уже сохранённый внешний анекдот"}
+		anekdots := &anekdotRepositoryStub{createErr: domain.ErrConflict, byID: &existing}
+		likes := &reactionRepositoryStub{}
+		service := newTestService(serviceDeps{anekdots: anekdots, likes: likes})
+
+		saved, err := service.SaveExternal(context.Background(), 5, "уже сохранённый внешний анекдот")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if saved.ID != 9 {
+			t.Fatalf("unexpected result: %+v", saved)
+		}
+
+		if len(likes.added) != 1 || likes.added[0] != 9 {
+			t.Fatalf("unexpected like call: %+v", likes.added)
+		}
+	})
+
+	t.Run("reports missing existing anecdote", func(t *testing.T) {
+		anekdots := &anekdotRepositoryStub{createErr: domain.ErrConflict}
+		service := newTestService(serviceDeps{anekdots: anekdots})
+
+		_, err := service.SaveExternal(context.Background(), 5, "уже сохранённый внешний анекдот")
+		if !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("expected not found, got %v", err)
+		}
+	})
+
+	t.Run("propagates storage error", func(t *testing.T) {
+		service := newTestService(serviceDeps{anekdots: &anekdotRepositoryStub{createErr: errors.New("boom")}})
+
+		_, err := service.SaveExternal(context.Background(), 5, "достаточно длинный внешний анекдот")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("propagates like error", func(t *testing.T) {
+		likes := &reactionRepositoryStub{addErr: errors.New("boom")}
+		service := newTestService(serviceDeps{likes: likes})
+
+		_, err := service.SaveExternal(context.Background(), 5, "достаточно длинный внешний анекдот")
+		if err == nil {
 			t.Fatal("expected error")
 		}
 	})

@@ -3,19 +3,16 @@ package main
 import (
 	"context"
 	"log/slog"
-	"os"
 
 	"github.com/alexey/anekdotus/backend/internal/adapter/postgres"
 	"github.com/alexey/anekdotus/backend/internal/config"
+	"github.com/alexey/anekdotus/backend/internal/entrypoint"
 	"github.com/alexey/anekdotus/backend/internal/logging"
 	"github.com/alexey/anekdotus/backend/internal/seed"
 )
 
 func main() {
-	if err := run(); err != nil {
-		slog.Error("seeding failed", "error", err)
-		os.Exit(1)
-	}
+	entrypoint.Run("seeding failed", run)
 }
 
 func run() error {

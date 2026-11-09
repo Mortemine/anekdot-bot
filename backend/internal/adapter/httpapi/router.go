@@ -68,6 +68,10 @@ func NewRouter(
 		"POST /api/v1/anekdots",
 		requireAuth(writeLimited(http.HandlerFunc(anekdotHandler.Create))),
 	)
+	mux.Handle(
+		"POST /api/v1/anekdots/external",
+		requireAuth(writeLimited(http.HandlerFunc(anekdotHandler.SaveExternal))),
+	)
 
 	mux.Handle("GET /api/v1/likes", requireAuth(http.HandlerFunc(likeHandler.List)))
 	mux.Handle("PUT /api/v1/likes/{anekdot_id}", requireAuth(http.HandlerFunc(likeHandler.Add)))

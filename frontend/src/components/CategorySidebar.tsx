@@ -1,4 +1,6 @@
-import type { Category } from "../types";
+import { useMemo, useState } from "react";
+
+import type { Category, CategorySort } from "../types";
 
 interface Props {
   categories: Category[];
@@ -6,12 +8,62 @@ interface Props {
   onSelect: (categoryId: number | null) => void;
 }
 
+const sortOptions: ReadonlyArray<{ id: CategorySort; label: string }> = [
+  { id: "name", label: "По алфавиту" },
+  { id: "count", label: "По количеству" },
+  { id: "popularity", label: "По популярности" },
+];
+
+function sortCategories(categories: Category[], sort: CategorySort): Category[] {
+  const sorted = [...categories];
+
+  switch (sort) {
+    case "count":
+      sorted.sort(
+        (left, right) => right.anekdot_count - left.anekdot_count || left.name.localeCompare(right.name, "ru"),
+      );
+      break;
+    case "popularity":
+      sorted.sort((left, right) => right.popularity - left.popularity || left.name.localeCompare(right.name, "ru"));
+      break;
+    default:
+      sorted.sort((left, right) => left.name.localeCompare(right.name, "ru"));
+  }
+
+  return sorted;
+}
+
 export function CategorySidebar({ categories, selectedCategory, onSelect }: Props) {
+  const [sort, setSort] = useState<CategorySort>("name");
+
   const total = categories.reduce((sum, category) => sum + category.anekdot_count, 0);
+  const sorted = useMemo(() => sortCategories(categories, sort), [categories, sort]);
 
   return (
     <aside className="sidebar">
-      <h2 className="sidebar-title">Категории</h2>
+      <div className="sidebar-header">
+        <h2 className="sidebar-title">Категории</h2>
+        <label className="category-sort" title="Сортировка категорий">
+          <span className="sort-icon" aria-hidden="true">
+            ⇅
+          </span>
+          <select
+            className="sort-select"
+            aria-label="Сортировка категорий"
+            value={sort}
+            onChange={(event) => {
+              const value = event.target.value;
+              setSort(value === "count" || value === "popularity" ? value : "name");
+            }}
+          >
+            {sortOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="sidebar-list">
         <button
           type="button"
@@ -22,7 +74,7 @@ export function CategorySidebar({ categories, selectedCategory, onSelect }: Prop
           <span className="category-button-name">Все анекдоты</span>
           <span className="category-button-count">{total}</span>
         </button>
-        {categories.map((category) => (
+        {sorted.map((category) => (
           <button
             key={category.id}
             type="button"

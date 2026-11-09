@@ -3,19 +3,16 @@ package main
 import (
 	"context"
 	"log/slog"
-	"os"
 
 	"github.com/alexey/anekdotus/backend/internal/app"
 	"github.com/alexey/anekdotus/backend/internal/config"
 	"github.com/alexey/anekdotus/backend/internal/di"
+	"github.com/alexey/anekdotus/backend/internal/entrypoint"
 	"github.com/alexey/anekdotus/backend/internal/logging"
 )
 
 func main() {
-	if err := run(); err != nil {
-		slog.Error("application terminated", "error", err)
-		os.Exit(1)
-	}
+	entrypoint.Run("application terminated", run)
 }
 
 func run() error {

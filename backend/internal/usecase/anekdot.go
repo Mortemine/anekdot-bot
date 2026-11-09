@@ -14,9 +14,10 @@ import (
 const (
 	minAnekdotLength    = 10
 	maxAnekdotLength    = 4000
-	userAnekdotLimit    = 200
+	MineAnekdotLimit    = 200
 	categoryPageSize    = 40
 	maxCategoryPageSize = 100
+	externalCategoryID  = 46
 )
 
 type AnekdotService struct {
@@ -57,11 +58,17 @@ func (s *AnekdotService) ListCategories(ctx context.Context) ([]domain.CategoryS
 		return nil, fmt.Errorf("counting anecdotes: %w", err)
 	}
 
+	popularity, err := s.anekdots.PopularityByCategory(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("counting category popularity: %w", err)
+	}
+
 	summaries := make([]domain.CategorySummary, 0, len(categories))
 	for _, category := range categories {
 		summaries = append(summaries, domain.CategorySummary{
 			Category:     category,
 			AnekdotCount: counts[category.ID],
+			Popularity:   popularity[category.ID],
 		})
 	}
 
@@ -74,7 +81,7 @@ func (s *AnekdotService) Anekdots(
 	limit, offset int,
 	sort domain.AnekdotSort,
 ) (domain.AnekdotPage, error) {
-	normalizedSort, err := normalizeAnekdotSort(sort)
+	normalizedSort, err := domain.ParseAnekdotSort(string(sort))
 	if err != nil {
 		return domain.AnekdotPage{}, err
 	}
@@ -105,25 +112,27 @@ func (s *AnekdotService) Anekdots(
 }
 
 func clampPageSize(limit int) int {
-	switch {
-	case limit <= 0:
+	if limit <= 0 {
 		return categoryPageSize
-	case limit > maxCategoryPageSize:
-		return maxCategoryPageSize
-	default:
-		return limit
 	}
+
+	return min(limit, maxCategoryPageSize)
 }
 
-func normalizeAnekdotSort(sort domain.AnekdotSort) (domain.AnekdotSort, error) {
-	switch sort {
-	case "":
-		return domain.AnekdotSortCreated, nil
-	case domain.AnekdotSortCreated, domain.AnekdotSortLikes, domain.AnekdotSortFavorites:
-		return sort, nil
-	default:
-		return "", fmt.Errorf("%w: sort must be created, likes or favorites", domain.ErrInvalidInput)
+func normalizeAnekdotText(text string) (string, error) {
+	trimmed := strings.TrimSpace(text)
+
+	length := utf8.RuneCountInString(trimmed)
+	if length < minAnekdotLength || length > maxAnekdotLength {
+		return "", fmt.Errorf(
+			"%w: anecdote text must be %d to %d characters long",
+			domain.ErrInvalidInput,
+			minAnekdotLength,
+			maxAnekdotLength,
+		)
 	}
+
+	return trimmed, nil
 }
 
 func (s *AnekdotService) Random(ctx context.Context, categoryID *int) (domain.Anekdot, error) {
@@ -157,22 +166,49 @@ func (s *AnekdotService) External(ctx context.Context) (string, error) {
 	return text, nil
 }
 
+func (s *AnekdotService) SaveExternal(
+	ctx context.Context,
+	userID int64,
+	text string,
+) (domain.Anekdot, error) {
+	trimmed, err := normalizeAnekdotText(text)
+	if err != nil {
+		return domain.Anekdot{}, err
+	}
+
+	saved, err := s.anekdots.Create(ctx, domain.Anekdot{
+		CategoryID: externalCategoryID,
+		Text:       trimmed,
+	})
+	if err != nil {
+		if !errors.Is(err, domain.ErrConflict) {
+			return domain.Anekdot{}, fmt.Errorf("storing external anecdote: %w", err)
+		}
+
+		saved, err = s.anekdots.ByText(ctx, externalCategoryID, trimmed)
+		if err != nil {
+			return domain.Anekdot{}, fmt.Errorf("loading existing external anecdote: %w", err)
+		}
+	}
+
+	if err := s.likes.Add(ctx, userID, saved.ID); err != nil {
+		return domain.Anekdot{}, fmt.Errorf("saving like: %w", err)
+	}
+
+	s.logger.InfoContext(ctx, "external anecdote saved", "anekdot_id", saved.ID, "user_id", userID)
+
+	return saved, nil
+}
+
 func (s *AnekdotService) Create(
 	ctx context.Context,
 	authorID int64,
 	categoryID int,
 	text string,
 ) (domain.Anekdot, error) {
-	trimmed := strings.TrimSpace(text)
-
-	length := utf8.RuneCountInString(trimmed)
-	if length < minAnekdotLength || length > maxAnekdotLength {
-		return domain.Anekdot{}, fmt.Errorf(
-			"%w: anecdote text must be %d to %d characters long",
-			domain.ErrInvalidInput,
-			minAnekdotLength,
-			maxAnekdotLength,
-		)
+	trimmed, err := normalizeAnekdotText(text)
+	if err != nil {
+		return domain.Anekdot{}, err
 	}
 
 	if err := s.checkCategory(ctx, categoryID); err != nil {
@@ -200,7 +236,7 @@ func (s *AnekdotService) Create(
 }
 
 func (s *AnekdotService) Mine(ctx context.Context, authorID int64) ([]domain.Anekdot, error) {
-	anekdots, err := s.anekdots.ListByAuthor(ctx, authorID, userAnekdotLimit)
+	anekdots, err := s.anekdots.ListByAuthor(ctx, authorID, MineAnekdotLimit)
 	if err != nil {
 		return nil, fmt.Errorf("listing anecdotes of author %d: %w", authorID, err)
 	}

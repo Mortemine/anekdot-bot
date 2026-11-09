@@ -18,56 +18,71 @@ type apiError struct {
 	Message string `json:"message"`
 }
 
+const internalErrorMessage = "Внутренняя ошибка сервера."
+
+type errorMapping struct {
+	err     error
+	status  int
+	code    string
+	message string
+}
+
+var errorMappings = []errorMapping{
+	{domain.ErrNotFound, http.StatusNotFound, "not_found", "Ничего не найдено."},
+	{domain.ErrInvalidInput, http.StatusBadRequest, "invalid_input", "Проверьте введённые данные."},
+	{domain.ErrUnauthorized, http.StatusUnauthorized, "unauthorized", "Неверная почта или пароль."},
+	{domain.ErrConflict, http.StatusConflict, "conflict", "Такая запись уже есть."},
+	{domain.ErrForbidden, http.StatusForbidden, "forbidden", "Недостаточно прав для этого действия."},
+	{
+		domain.ErrUpstreamUnavailable,
+		http.StatusBadGateway,
+		"upstream_unavailable",
+		"Внешний источник анекдотов сейчас недоступен.",
+	},
+}
+
 func writeJSON(w http.ResponseWriter, status int, payload any) {
 	body, err := json.Marshal(payload)
-	if err != nil {
-		http.Error(w, `{"error":{"code":"internal_error","message":"internal server error"}}`, http.StatusInternalServerError)
-
-		return
-	}
-
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
 
-	if _, err := w.Write(body); err != nil {
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":{"code":"internal_error","message":"` + internalErrorMessage + `"}}`))
+
 		return
 	}
+
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, errorEnvelope{Error: apiError{Code: code, Message: message}})
 }
 
-func writeDomainError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, domain.ErrNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "Ничего не найдено.")
-	case errors.Is(err, domain.ErrInvalidInput):
-		writeError(w, http.StatusBadRequest, "invalid_input", "Проверьте введённые данные.")
-	case errors.Is(err, domain.ErrUnauthorized):
-		writeError(w, http.StatusUnauthorized, "unauthorized", "Неверная почта или пароль.")
-	case errors.Is(err, domain.ErrConflict):
-		writeError(w, http.StatusConflict, "conflict", "Такая запись уже есть.")
-	case errors.Is(err, domain.ErrForbidden):
-		writeError(w, http.StatusForbidden, "forbidden", "Недостаточно прав для этого действия.")
-	case errors.Is(err, domain.ErrUpstreamUnavailable):
-		writeError(w, http.StatusBadGateway, "upstream_unavailable", "Внешний источник анекдотов сейчас недоступен.")
-	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера.")
+func lookupErrorMapping(err error) (errorMapping, bool) {
+	for _, mapping := range errorMappings {
+		if errors.Is(err, mapping.err) {
+			return mapping, true
+		}
 	}
+
+	return errorMapping{}, false
 }
 
-func isExpectedError(err error) bool {
-	return errors.Is(err, domain.ErrNotFound) ||
-		errors.Is(err, domain.ErrInvalidInput) ||
-		errors.Is(err, domain.ErrUnauthorized) ||
-		errors.Is(err, domain.ErrConflict) ||
-		errors.Is(err, domain.ErrForbidden) ||
-		errors.Is(err, domain.ErrUpstreamUnavailable)
+func writeDomainError(w http.ResponseWriter, err error) {
+	mapping, ok := lookupErrorMapping(err)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "internal_error", internalErrorMessage)
+
+		return
+	}
+
+	writeError(w, mapping.status, mapping.code, mapping.message)
 }
 
 func writeRequestError(w http.ResponseWriter, r *http.Request, logger *slog.Logger, message string, err error) {
-	if !isExpectedError(err) {
+	if _, ok := lookupErrorMapping(err); !ok {
 		logger.ErrorContext(
 			r.Context(),
 			message,

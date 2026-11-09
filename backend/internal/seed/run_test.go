@@ -103,6 +103,29 @@ func TestReadAnekdots(t *testing.T) {
 	})
 }
 
+func TestShouldLogProgress(t *testing.T) {
+	tests := []struct {
+		name      string
+		processed int
+		total     int
+		want      bool
+	}{
+		{name: "mid batch", processed: 500, total: 1200},
+		{name: "final batch", processed: 1200, total: 1200, want: true},
+		{name: "round ten thousand", processed: 20_000, total: 50_000, want: true},
+		{name: "round fifty thousand", processed: 50_000, total: 50_000, want: true},
+		{name: "empty input", processed: 0, total: 0, want: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := shouldLogProgress(test.processed, test.total); got != test.want {
+				t.Fatalf("shouldLogProgress(%d, %d) = %v, want %v", test.processed, test.total, got, test.want)
+			}
+		})
+	}
+}
+
 func TestRunReportsMissingData(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 

@@ -30,7 +30,6 @@ interface Props {
   onToggleLike: (target: Anekdot) => void;
   onToggleFavorite: (target: Anekdot) => void;
   onAddToCollection?: (target: Anekdot, collectionId: number) => void;
-  onReload: () => void;
   paging?: AnekdotPaging;
 }
 
@@ -63,7 +62,6 @@ export function AnekdotListPanel({
   onToggleLike,
   onToggleFavorite,
   onAddToCollection,
-  onReload,
   paging,
 }: Props) {
   const [pickerID, setPickerID] = useState<number | null>(null);
@@ -77,9 +75,6 @@ export function AnekdotListPanel({
           <h2>{heading}</h2>
           <p className="muted">{description}</p>
         </div>
-        <button type="button" className="button" onClick={onReload} disabled={loading}>
-          Обновить
-        </button>
       </div>
 
       {paging !== undefined && (

@@ -2,7 +2,10 @@ export interface Category {
   id: number;
   name: string;
   anekdot_count: number;
+  popularity: number;
 }
+
+export type CategorySort = "name" | "count" | "popularity";
 
 export interface Anekdot {
   id: number;
@@ -58,3 +61,5 @@ export interface CollectionDetail {
   collection: Collection;
   anekdots: Anekdot[];
 }
+
+export type CollectionSection = "mine" | "favorites" | "public";

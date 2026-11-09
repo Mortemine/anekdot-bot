@@ -17,6 +17,7 @@ export function SubmitPanel({ categories, user }: SubmitPanelProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
 
   const loadMine = useCallback(async () => {
     try {
@@ -30,6 +31,8 @@ export function SubmitPanel({ categories, user }: SubmitPanelProps) {
   useEffect(() => {
     if (user === null) {
       setMine([]);
+      setFormOpen(false);
+
       return;
     }
 
@@ -41,7 +44,7 @@ export function SubmitPanel({ categories, user }: SubmitPanelProps) {
       <section className="panel" aria-labelledby="submit-heading">
         <div className="panel-heading">
           <div>
-            <h2 id="submit-heading">Свой анекдот</h2>
+            <h2 id="submit-heading">Мои анекдоты</h2>
             <p className="muted">Публиковать анекдоты могут только зарегистрированные читатели.</p>
           </div>
         </div>
@@ -59,6 +62,7 @@ export function SubmitPanel({ categories, user }: SubmitPanelProps) {
     try {
       const payload = await api.createAnekdot(categoryId, text.trim());
       setText("");
+      setFormOpen(false);
       setNotice(`Анекдот №${payload.anekdot.id} опубликован.`);
       await loadMine();
     } catch (submitError) {
@@ -72,9 +76,22 @@ export function SubmitPanel({ categories, user }: SubmitPanelProps) {
     <section className="panel" aria-labelledby="submit-heading">
       <div className="panel-heading">
         <div>
-          <h2 id="submit-heading">Свой анекдот</h2>
-          <p className="muted">Анекдот появится в общей ленте сразу после отправки.</p>
+          <h2 id="submit-heading">Мои анекдоты</h2>
+          <p className="muted">Анекдоты, которые вы опубликовали.</p>
         </div>
+        <button
+          type="button"
+          className="button button-primary"
+          disabled={busy}
+          aria-expanded={formOpen}
+          onClick={() => {
+            setFormOpen(!formOpen);
+            setError(null);
+            setNotice(null);
+          }}
+        >
+          {formOpen ? "Скрыть форму" : "Добавить анекдот"}
+        </button>
       </div>
 
       {error !== null && (
@@ -89,45 +106,57 @@ export function SubmitPanel({ categories, user }: SubmitPanelProps) {
         </p>
       )}
 
-      <form className="form" onSubmit={submit}>
-        <label className="field">
-          <span className="field-label">Категория</span>
-          <select
-            className="input"
-            name="category"
-            value={categoryId}
-            onChange={(event) => setCategoryId(Number(event.target.value))}
-          >
-            <option value={0}>Вне категорий</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-        </label>
+      {formOpen && (
+        <form className="form" onSubmit={submit}>
+          <label className="field">
+            <span className="field-label">Категория</span>
+            <select
+              className="input"
+              name="category"
+              value={categoryId}
+              onChange={(event) => setCategoryId(Number(event.target.value))}
+            >
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        <label className="field">
-          <span className="field-label">Текст анекдота</span>
-          <textarea
-            className="input textarea"
-            name="text"
-            required
-            minLength={10}
-            maxLength={4000}
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            placeholder="От 10 до 4000 символов"
-          />
-          <span className="field-hint">Осталось символов: {4000 - text.length}</span>
-        </label>
+          <label className="field">
+            <span className="field-label">Текст анекдота</span>
+            <textarea
+              className="input textarea"
+              name="text"
+              required
+              minLength={10}
+              maxLength={4000}
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              placeholder="От 10 до 4000 символов"
+            />
+            <span className="field-hint">Осталось символов: {4000 - text.length}</span>
+          </label>
 
-        <button type="submit" className="button button-primary" disabled={busy || text.trim().length < 10}>
-          {busy ? "Отправляем…" : "Опубликовать"}
-        </button>
-      </form>
-
-      <h3 className="section-title">Мои анекдоты</h3>
+          <div className="collection-actions">
+            <button type="submit" className="button button-primary" disabled={busy || text.trim().length < 10}>
+              {busy ? "Отправляем…" : "Опубликовать"}
+            </button>
+            <button
+              type="button"
+              className="button"
+              disabled={busy}
+              onClick={() => {
+                setFormOpen(false);
+                setError(null);
+              }}
+            >
+              Отмена
+            </button>
+          </div>
+        </form>
+      )}
 
       {mine.length === 0 ? (
         <p className="empty-state">Вы пока ничего не опубликовали.</p>

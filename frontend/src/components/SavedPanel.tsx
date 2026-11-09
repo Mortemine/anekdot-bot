@@ -18,7 +18,6 @@ interface Props {
   onToggleLike: (target: Anekdot) => void;
   onToggleFavorite: (target: Anekdot) => void;
   onAddToCollection?: (target: Anekdot, collectionId: number) => void;
-  onReload: () => void;
 }
 
 export function SavedPanel({
@@ -38,7 +37,6 @@ export function SavedPanel({
   onToggleLike,
   onToggleFavorite,
   onAddToCollection,
-  onReload,
 }: Props) {
   if (user === null) {
     return (
@@ -66,7 +64,6 @@ export function SavedPanel({
       onToggleLike={onToggleLike}
       onToggleFavorite={onToggleFavorite}
       onAddToCollection={onAddToCollection}
-      onReload={onReload}
     />
   );
 }

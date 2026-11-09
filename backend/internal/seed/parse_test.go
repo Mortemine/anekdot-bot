@@ -28,17 +28,23 @@ func TestParseCategoriesErrors(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
+		want  string
 	}{
-		{name: "missing comma", input: "1 Разные"},
-		{name: "invalid id", input: "abc, Разные"},
-		{name: "empty name", input: "1,   "},
-		{name: "duplicate id", input: "1, Разные\n1, Другие"},
+		{name: "missing comma", input: "1 Разные", want: "categories: line 1: missing comma separator"},
+		{name: "invalid id", input: "abc, Разные", want: "categories: line 1: invalid category id"},
+		{name: "empty name", input: "1,   ", want: "categories: line 1: category 1 has an empty name"},
+		{name: "duplicate id", input: "1, Разные\n1, Другие", want: "categories: line 2: duplicate id 1"},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := ParseCategories(strings.NewReader(test.input)); err == nil {
+			_, err := ParseCategories(strings.NewReader(test.input))
+			if err == nil {
 				t.Fatal("ParseCategories() error = nil, want error")
+			}
+
+			if !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %q, want it to contain %q", err, test.want)
 			}
 		})
 	}
@@ -53,6 +59,8 @@ func TestParseAnekdots(t *testing.T) {
 		` 3, Тоже неизвестная`,
 		` abc, плохой id`,
 		` 1, Без запятой в тексте`,
+		` 1,    `,
+		`, без категории`,
 	}, "\n")
 
 	known := map[int]struct{}{1: {}}
@@ -75,14 +83,14 @@ func TestParseAnekdots(t *testing.T) {
 		t.Errorf("record 2 text = %q", records[2].Text)
 	}
 
-	if stats.Total != 7 {
-		t.Errorf("Total = %d, want 7", stats.Total)
+	if stats.Total != 9 {
+		t.Errorf("Total = %d, want 9", stats.Total)
 	}
 	if stats.Imported != 3 {
 		t.Errorf("Imported = %d, want 3", stats.Imported)
 	}
-	if stats.Skipped != 4 {
-		t.Errorf("Skipped = %d, want 4", stats.Skipped)
+	if stats.Skipped != 6 {
+		t.Errorf("Skipped = %d, want 6", stats.Skipped)
 	}
 }
 

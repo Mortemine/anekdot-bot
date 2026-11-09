@@ -31,6 +31,14 @@ const (
 	defaultTrustProxyHeaders       = false
 )
 
+var logLevels = map[string]slog.Level{
+	"debug":   slog.LevelDebug,
+	"info":    slog.LevelInfo,
+	"warn":    slog.LevelWarn,
+	"warning": slog.LevelWarn,
+	"error":   slog.LevelError,
+}
+
 type Config struct {
 	HTTPAddr           string
 	DatabaseURL        string
@@ -186,18 +194,12 @@ func parseOrigins(raw string) ([]string, error) {
 }
 
 func parseLogLevel(raw string) (slog.Level, error) {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "debug":
-		return slog.LevelDebug, nil
-	case "info":
-		return slog.LevelInfo, nil
-	case "warn", "warning":
-		return slog.LevelWarn, nil
-	case "error":
-		return slog.LevelError, nil
-	default:
-		return 0, fmt.Errorf("config: LOG_LEVEL must be debug, info, warn or error")
+	level, ok := logLevels[strings.ToLower(strings.TrimSpace(raw))]
+	if !ok {
+		return level, fmt.Errorf("config: LOG_LEVEL must be debug, info, warn or error")
 	}
+
+	return level, nil
 }
 
 func env(key, fallback string) string {
@@ -209,12 +211,17 @@ func env(key, fallback string) string {
 }
 
 func envBool(key string, fallback bool) bool {
-	value, ok := os.LookupEnv(key)
-	if !ok || strings.TrimSpace(value) == "" {
+	raw, ok := os.LookupEnv(key)
+	if !ok {
 		return fallback
 	}
 
-	parsed, err := strconv.ParseBool(strings.TrimSpace(value))
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseBool(value)
 	if err != nil {
 		return fallback
 	}
@@ -224,28 +231,38 @@ func envBool(key string, fallback bool) bool {
 
 func envInt32(key string, fallback int32) (int32, error) {
 	raw, ok := os.LookupEnv(key)
-	if !ok || strings.TrimSpace(raw) == "" {
+	if !ok {
 		return fallback, nil
 	}
 
-	value, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 32)
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return fallback, nil
+	}
+
+	parsed, err := strconv.ParseInt(value, 10, 32)
 	if err != nil {
 		return 0, fmt.Errorf("config: %s must be an integer: %w", key, err)
 	}
 
-	return int32(value), nil
+	return int32(parsed), nil
 }
 
 func envDuration(key string, fallback time.Duration) (time.Duration, error) {
 	raw, ok := os.LookupEnv(key)
-	if !ok || strings.TrimSpace(raw) == "" {
+	if !ok {
 		return fallback, nil
 	}
 
-	value, err := time.ParseDuration(strings.TrimSpace(raw))
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return fallback, nil
+	}
+
+	parsed, err := time.ParseDuration(value)
 	if err != nil {
 		return 0, fmt.Errorf("config: %s must be a duration: %w", key, err)
 	}
 
-	return value, nil
+	return parsed, nil
 }

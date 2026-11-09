@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/alexey/anekdotus/backend/internal/domain"
@@ -112,22 +113,31 @@ func insertAnekdots(
 		ON CONFLICT DO NOTHING`
 
 	inserted := 0
+	processed := 0
+	remaining := records
 
-	for start := 0; start < len(records); start += defaultBatchSize {
-		end := min(start+defaultBatchSize, len(records))
+	for len(remaining) != 0 {
+		size := min(defaultBatchSize, len(remaining))
 
-		count, err := insertBatch(ctx, pool, query, records[start:end])
+		count, err := insertBatch(ctx, pool, query, remaining[:size])
 		if err != nil {
 			return 0, err
 		}
-		inserted += count
 
-		if logger != nil && (end == len(records) || end%20_000 == 0) {
-			logger.Info("seeding anekdots", "processed", end, "total", len(records))
+		inserted += count
+		processed += size
+		remaining = remaining[size:]
+
+		if logger != nil && shouldLogProgress(processed, len(records)) {
+			logger.Info("seeding anekdots", "processed", processed, "total", len(records))
 		}
 	}
 
 	return inserted, nil
+}
+
+func shouldLogProgress(processed, total int) bool {
+	return processed == total || processed%20_000 == 0
 }
 
 func insertBatch(ctx context.Context, pool *pgxpool.Pool, query string, records []Anekdot) (int, error) {
@@ -139,23 +149,62 @@ func insertBatch(ctx context.Context, pool *pgxpool.Pool, query string, records 
 		_ = tx.Rollback(ctx)
 	}()
 
+	return storeBatch(ctx, transactionSender{tx: tx}, query, records)
+}
+
+type batchTransaction interface {
+	SendBatch(ctx context.Context, batch *pgx.Batch) batchResults
+	Commit(ctx context.Context) error
+}
+
+type transactionSender struct {
+	tx pgx.Tx
+}
+
+func (t transactionSender) SendBatch(ctx context.Context, batch *pgx.Batch) batchResults {
+	return t.tx.SendBatch(ctx, batch)
+}
+
+func (t transactionSender) Commit(ctx context.Context) error {
+	return t.tx.Commit(ctx)
+}
+
+func storeBatch(ctx context.Context, tx batchTransaction, query string, records []Anekdot) (int, error) {
 	batch := &pgx.Batch{}
 	for _, record := range records {
 		batch.Queue(query, record.CategoryID, record.Text)
 	}
 
-	results := tx.SendBatch(ctx, batch)
+	inserted, err := collectBatch(tx.SendBatch(ctx, batch), len(records))
+	if err != nil {
+		return 0, err
+	}
 
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("committing seed transaction: %w", err)
+	}
+
+	return inserted, nil
+}
+
+type batchResults interface {
+	Exec() (pgconn.CommandTag, error)
+	Close() error
+}
+
+func collectBatch(results batchResults, total int) (int, error) {
 	inserted := 0
 
 	var execErr error
-	for range records {
+
+	for range total {
 		tag, err := results.Exec()
 		if err != nil {
 			execErr = err
 
 			break
 		}
+
 		inserted += int(tag.RowsAffected())
 	}
 
@@ -163,12 +212,9 @@ func insertBatch(ctx context.Context, pool *pgxpool.Pool, query string, records 
 	if execErr != nil {
 		return 0, fmt.Errorf("inserting anekdot batch: %w", execErr)
 	}
+
 	if closeErr != nil {
 		return 0, fmt.Errorf("closing anekdot batch: %w", closeErr)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("committing seed transaction: %w", err)
 	}
 
 	return inserted, nil

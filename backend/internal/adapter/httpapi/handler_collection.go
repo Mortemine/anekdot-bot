@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"strconv"
 
 	"github.com/alexey/anekdotus/backend/internal/domain"
 	"github.com/alexey/anekdotus/backend/internal/usecase"
@@ -19,21 +18,25 @@ type anekdotCollection struct {
 }
 
 func NewLikeHandler(service *usecase.AnekdotService, logger *slog.Logger) *anekdotCollection {
-	return &anekdotCollection{
-		resource: "likes",
-		list:     service.Likes,
-		add:      service.AddLike,
-		remove:   service.RemoveLike,
-		logger:   logger,
-	}
+	return newAnekdotCollection("likes", service.Likes, service.AddLike, service.RemoveLike, logger)
 }
 
 func NewFavoriteHandler(service *usecase.AnekdotService, logger *slog.Logger) *anekdotCollection {
+	return newAnekdotCollection("favorites", service.Favorites, service.AddFavorite, service.RemoveFavorite, logger)
+}
+
+func newAnekdotCollection(
+	resource string,
+	list func(ctx context.Context, userID int64) ([]domain.Anekdot, error),
+	add func(ctx context.Context, userID, anekdotID int64) error,
+	remove func(ctx context.Context, userID, anekdotID int64) error,
+	logger *slog.Logger,
+) *anekdotCollection {
 	return &anekdotCollection{
-		resource: "favorites",
-		list:     service.Favorites,
-		add:      service.AddFavorite,
-		remove:   service.RemoveFavorite,
+		resource: resource,
+		list:     list,
+		add:      add,
+		remove:   remove,
 		logger:   logger,
 	}
 }
@@ -55,7 +58,7 @@ func (h *anekdotCollection) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *anekdotCollection) Add(w http.ResponseWriter, r *http.Request) {
-	anekdotID, ok := h.anekdotID(w, r)
+	anekdotID, ok := parsePathID(w, r, "anekdot_id", "анекдота")
 	if !ok {
 		return
 	}
@@ -75,7 +78,7 @@ func (h *anekdotCollection) Add(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *anekdotCollection) Remove(w http.ResponseWriter, r *http.Request) {
-	anekdotID, ok := h.anekdotID(w, r)
+	anekdotID, ok := parsePathID(w, r, "anekdot_id", "анекдота")
 	if !ok {
 		return
 	}
@@ -92,17 +95,6 @@ func (h *anekdotCollection) Remove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (h *anekdotCollection) anekdotID(w http.ResponseWriter, r *http.Request) (int64, bool) {
-	anekdotID, err := strconv.ParseInt(r.PathValue("anekdot_id"), 10, 64)
-	if err != nil || anekdotID <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid_input", "Идентификатор анекдота должен быть положительным числом.")
-
-		return 0, false
-	}
-
-	return anekdotID, true
 }
 
 func (h *anekdotCollection) handleError(w http.ResponseWriter, r *http.Request, err error) {

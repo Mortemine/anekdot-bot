@@ -81,14 +81,14 @@ func ParseAnekdots(reader io.Reader, knownCategories map[int]struct{}) ([]Anekdo
 			continue
 		}
 
-		comma := strings.IndexByte(line, ',')
-		if comma < 0 {
+		rawCategory, rawText, found := strings.Cut(line, ",")
+		if !found {
 			stats.Skipped++
 
 			continue
 		}
 
-		categoryID, err := strconv.Atoi(strings.TrimSpace(line[:comma]))
+		categoryID, err := strconv.Atoi(strings.TrimSpace(rawCategory))
 		if err != nil {
 			stats.Skipped++
 
@@ -101,7 +101,7 @@ func ParseAnekdots(reader io.Reader, knownCategories map[int]struct{}) ([]Anekdo
 			continue
 		}
 
-		text := normalizeText(line[comma+1:])
+		text := normalizeText(rawText)
 		if text == "" {
 			stats.Skipped++
 
@@ -121,17 +121,17 @@ func ParseAnekdots(reader io.Reader, knownCategories map[int]struct{}) ([]Anekdo
 }
 
 func parseCategoryLine(line string) (domain.Category, error) {
-	comma := strings.IndexByte(line, ',')
-	if comma < 0 {
+	rawID, rawName, found := strings.Cut(line, ",")
+	if !found {
 		return domain.Category{}, fmt.Errorf("missing comma separator")
 	}
 
-	id, err := strconv.Atoi(strings.TrimSpace(line[:comma]))
+	id, err := strconv.Atoi(strings.TrimSpace(rawID))
 	if err != nil {
 		return domain.Category{}, fmt.Errorf("invalid category id: %w", err)
 	}
 
-	name := strings.TrimSpace(line[comma+1:])
+	name := strings.TrimSpace(rawName)
 	if name == "" {
 		return domain.Category{}, fmt.Errorf("category %d has an empty name", id)
 	}

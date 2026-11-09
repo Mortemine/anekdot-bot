@@ -76,7 +76,8 @@ func recovererMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 				if recovered == nil {
 					return
 				}
-				if err, ok := recovered.(error); ok && errors.Is(err, http.ErrAbortHandler) {
+
+				if err, isError := recovered.(error); isError && errors.Is(err, http.ErrAbortHandler) {
 					panic(recovered)
 				}
 
@@ -241,14 +242,12 @@ func requireUser(w http.ResponseWriter, r *http.Request) (domain.User, bool) {
 }
 
 func bearerToken(r *http.Request) string {
-	const prefix = "bearer "
-
-	header := r.Header.Get("Authorization")
-	if len(header) <= len(prefix) || !strings.EqualFold(header[:len(prefix)], prefix) {
+	scheme, token, found := strings.Cut(r.Header.Get("Authorization"), " ")
+	if !found || !strings.EqualFold(scheme, "bearer") {
 		return ""
 	}
 
-	return strings.TrimSpace(header[len(prefix):])
+	return strings.TrimSpace(token)
 }
 
 func authMiddleware(service *usecase.AuthService, logger *slog.Logger) func(http.Handler) http.Handler {
@@ -328,6 +327,10 @@ func (l *ipRateLimiter) Allow(key string) bool {
 
 	entry, ok := l.entries[key]
 	if !ok {
+		if len(l.entries) >= l.maxEntries {
+			return false
+		}
+
 		entry = &ipLimiterEntry{limiter: rate.NewLimiter(l.limit, l.burst)}
 		l.entries[key] = entry
 	}

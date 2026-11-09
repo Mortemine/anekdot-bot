@@ -100,6 +100,12 @@ export const api = {
 
   externalAnekdot: () => request<{ anekdot: ExternalAnekdot }>("/anekdots/external"),
 
+  saveExternalAnekdot: (text: string) =>
+    request<{ anekdot: Anekdot }>("/anekdots/external", {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+
   register: (email: string, password: string, displayName: string) =>
     request<AuthResult>("/auth/register", {
       method: "POST",

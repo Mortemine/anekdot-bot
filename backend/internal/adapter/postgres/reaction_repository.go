@@ -2,10 +2,8 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/alexey/anekdotus/backend/internal/domain"
@@ -71,10 +69,4 @@ func (r reactionRepository) remove(ctx context.Context, userID, anekdotID int64)
 	}
 
 	return nil
-}
-
-func isForeignKeyViolation(err error) bool {
-	var pgErr *pgconn.PgError
-
-	return errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode
 }

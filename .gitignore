@@ -8,6 +8,9 @@ frontend/npm-debug.log*
 *.test
 *.out
 
+.metrics/
+target/
+
 .env
 .env.local
 

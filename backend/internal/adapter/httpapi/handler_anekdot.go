@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -20,6 +21,7 @@ type categoryDTO struct {
 	ID           int    `json:"id"`
 	Name         string `json:"name"`
 	AnekdotCount int    `json:"anekdot_count"`
+	Popularity   int    `json:"popularity"`
 }
 
 type anekdotDTO struct {
@@ -62,6 +64,10 @@ type createAnekdotRequest struct {
 	Text       string `json:"text"`
 }
 
+type saveExternalAnekdotRequest struct {
+	Text string `json:"text"`
+}
+
 type AnekdotHandler struct {
 	service *usecase.AnekdotService
 	logger  *slog.Logger
@@ -79,16 +85,7 @@ func (h *AnekdotHandler) ListCategories(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	categories := make([]categoryDTO, 0, len(summaries))
-	for _, summary := range summaries {
-		categories = append(categories, categoryDTO{
-			ID:           summary.ID,
-			Name:         summary.Name,
-			AnekdotCount: summary.AnekdotCount,
-		})
-	}
-
-	writeJSON(w, http.StatusOK, categoriesResponse{Categories: categories})
+	writeJSON(w, http.StatusOK, categoriesResponse{Categories: toCategoriesDTO(summaries)})
 }
 
 func (h *AnekdotHandler) Random(w http.ResponseWriter, r *http.Request) {
@@ -158,18 +155,38 @@ func (h *AnekdotHandler) External(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *AnekdotHandler) SaveExternal(w http.ResponseWriter, r *http.Request) {
+	var payload saveExternalAnekdotRequest
+
+	h.submit(w, r, &payload, func(ctx context.Context, userID int64) (domain.Anekdot, error) {
+		return h.service.SaveExternal(ctx, userID, payload.Text)
+	})
+}
+
 func (h *AnekdotHandler) Create(w http.ResponseWriter, r *http.Request) {
+	var payload createAnekdotRequest
+
+	h.submit(w, r, &payload, func(ctx context.Context, userID int64) (domain.Anekdot, error) {
+		return h.service.Create(ctx, userID, payload.CategoryID, payload.Text)
+	})
+}
+
+func (h *AnekdotHandler) submit(
+	w http.ResponseWriter,
+	r *http.Request,
+	payload any,
+	save func(ctx context.Context, userID int64) (domain.Anekdot, error),
+) {
 	user, ok := requireUser(w, r)
 	if !ok {
 		return
 	}
 
-	var payload createAnekdotRequest
-	if !decodeRequest(w, r, maxAnekdotBodyBytes, &payload) {
+	if !decodeRequest(w, r, maxAnekdotBodyBytes, payload) {
 		return
 	}
 
-	created, err := h.service.Create(r.Context(), user.ID, payload.CategoryID, payload.Text)
+	created, err := save(r.Context(), user.ID)
 	if err != nil {
 		h.handleError(w, r, err)
 
@@ -195,7 +212,7 @@ func (h *AnekdotHandler) Mine(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, anekdotsResponse{
 		Anekdots: toAnekdotsDTO(anekdots),
 		Total:    len(anekdots),
-		Limit:    len(anekdots),
+		Limit:    usecase.MineAnekdotLimit,
 	})
 }
 
@@ -206,6 +223,20 @@ func toAnekdotsDTO(anekdots []domain.Anekdot) []anekdotDTO {
 	}
 
 	return payload
+}
+
+func toCategoriesDTO(summaries []domain.CategorySummary) []categoryDTO {
+	categories := make([]categoryDTO, 0, len(summaries))
+	for _, summary := range summaries {
+		categories = append(categories, categoryDTO{
+			ID:           summary.ID,
+			Name:         summary.Name,
+			AnekdotCount: summary.AnekdotCount,
+			Popularity:   summary.Popularity,
+		})
+	}
+
+	return categories
 }
 
 func (h *AnekdotHandler) handleError(w http.ResponseWriter, r *http.Request, err error) {
@@ -261,12 +292,8 @@ func parsePageParam(w http.ResponseWriter, raw string) (int, bool) {
 }
 
 func parseAnekdotSort(w http.ResponseWriter, raw string) (domain.AnekdotSort, bool) {
-	switch domain.AnekdotSort(raw) {
-	case "":
-		return domain.AnekdotSortCreated, true
-	case domain.AnekdotSortCreated, domain.AnekdotSortLikes, domain.AnekdotSortFavorites:
-		return domain.AnekdotSort(raw), true
-	default:
+	sort, err := domain.ParseAnekdotSort(raw)
+	if err != nil {
 		writeError(
 			w,
 			http.StatusBadRequest,
@@ -276,6 +303,8 @@ func parseAnekdotSort(w http.ResponseWriter, raw string) (domain.AnekdotSort, bo
 
 		return "", false
 	}
+
+	return sort, true
 }
 
 func toAnekdotDTO(anekdot domain.Anekdot) anekdotDTO {

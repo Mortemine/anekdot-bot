@@ -5,10 +5,19 @@ import { AccountPanel } from "./components/AccountPanel";
 import { AnekdotListPanel } from "./components/AnekdotListPanel";
 import { CategorySidebar } from "./components/CategorySidebar";
 import { CollectionsPanel } from "./components/CollectionsPanel";
+import { CollectionsSidebar } from "./components/CollectionsSidebar";
 import { ExternalPanel } from "./components/ExternalPanel";
 import { SavedPanel } from "./components/SavedPanel";
 import { SubmitPanel } from "./components/SubmitPanel";
-import type { Anekdot, AnekdotSort, AuthResult, Category, Collection, User } from "./types";
+import type {
+  Anekdot,
+  AnekdotSort,
+  AuthResult,
+  Category,
+  Collection,
+  CollectionSection,
+  User,
+} from "./types";
 
 type Tab = "anekdots" | "external" | "likes" | "favorites" | "collections" | "submit" | "account";
 
@@ -18,7 +27,7 @@ const tabs: ReadonlyArray<{ id: Tab; label: string }> = [
   { id: "likes", label: "Понравившиеся" },
   { id: "favorites", label: "Избранное" },
   { id: "collections", label: "Коллекции" },
-  { id: "submit", label: "Свой анекдот" },
+  { id: "submit", label: "Мои анекдоты" },
   { id: "account", label: "Аккаунт" },
 ];
 
@@ -46,6 +55,11 @@ export default function App() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [collectionsLoading, setCollectionsLoading] = useState(false);
   const [collectionsError, setCollectionsError] = useState<string | null>(null);
+  const [publicCollections, setPublicCollections] = useState<Collection[]>([]);
+  const [publicCollectionsLoading, setPublicCollectionsLoading] = useState(false);
+  const [publicCollectionsError, setPublicCollectionsError] = useState<string | null>(null);
+  const [favoriteCollections, setFavoriteCollections] = useState<Collection[]>([]);
+  const [collectionSection, setCollectionSection] = useState<CollectionSection>("mine");
   const [busyID, setBusyID] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
@@ -53,6 +67,7 @@ export default function App() {
   const latestLikes = useRef(0);
   const latestFavorites = useRef(0);
   const latestCollections = useRef(0);
+  const latestPublicCollections = useRef(0);
 
   const loadAnekdots = useCallback(
     async (categoryId: number | null, pageNumber: number, size: number, order: AnekdotSort) => {
@@ -180,6 +195,52 @@ export default function App() {
     }
   }, []);
 
+  const loadPublicCollections = useCallback(async () => {
+    latestPublicCollections.current += 1;
+    const requestId = latestPublicCollections.current;
+
+    setPublicCollectionsLoading(true);
+    setPublicCollectionsError(null);
+
+    try {
+      const payload = await api.listPublicCollections();
+      if (requestId !== latestPublicCollections.current) {
+        return;
+      }
+
+      setPublicCollections(payload.collections);
+    } catch (loadError) {
+      if (requestId !== latestPublicCollections.current) {
+        return;
+      }
+
+      setPublicCollectionsError(errorMessage(loadError));
+    } finally {
+      if (requestId === latestPublicCollections.current) {
+        setPublicCollectionsLoading(false);
+      }
+    }
+  }, []);
+
+  const loadFavoriteCollections = useCallback(async () => {
+    if (user === null) {
+      setFavoriteCollections([]);
+
+      return;
+    }
+
+    try {
+      const payload = await api.listCollectionFavorites();
+      setFavoriteCollections(payload.collections);
+    } catch {
+      setFavoriteCollections([]);
+    }
+  }, [user]);
+
+  const refreshCollections = useCallback(async () => {
+    await Promise.all([loadCollections(), loadPublicCollections(), loadFavoriteCollections()]);
+  }, [loadCollections, loadFavoriteCollections, loadPublicCollections]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -235,13 +296,14 @@ export default function App() {
       setLikes([]);
       setFavorites([]);
       setCollections([]);
+      setFavoriteCollections([]);
       return;
     }
 
     void loadLikes();
     void loadFavorites();
-    void loadCollections();
-  }, [user, loadLikes, loadFavorites, loadCollections]);
+    void refreshCollections();
+  }, [user, loadLikes, loadFavorites, refreshCollections]);
 
   useEffect(() => {
     setActionError(null);
@@ -285,6 +347,7 @@ export default function App() {
     setLikes([]);
     setFavorites([]);
     setCollections([]);
+    setFavoriteCollections([]);
     setActionError(null);
     setActionNotice(null);
   }, []);
@@ -366,7 +429,29 @@ export default function App() {
     [favoriteIDs, loadFavorites, reloadAnecdots, user],
   );
 
+  const handleLikeAction = useCallback(
+    (target: Anekdot) => {
+      void handleToggleLike(target);
+    },
+    [handleToggleLike],
+  );
+
+  const handleFavoriteAction = useCallback(
+    (target: Anekdot) => {
+      void handleToggleFavorite(target);
+    },
+    [handleToggleFavorite],
+  );
+
+  const handleCollectionAction = useCallback(
+    (target: Anekdot, collectionId: number) => {
+      void handleAddToCollection(target, collectionId);
+    },
+    [handleAddToCollection],
+  );
+
   const selectedCategoryName = categories.find((category) => category.id === selectedCategory)?.name ?? "Все анекдоты";
+  const hasSidebar = tab === "anekdots" || tab === "collections";
 
   return (
     <div className="app">
@@ -396,12 +481,23 @@ export default function App() {
         ))}
       </nav>
 
-      <div className="layout">
-        <CategorySidebar
-          categories={categories}
-          selectedCategory={selectedCategory}
-          onSelect={handleSelectCategory}
-        />
+      <div className={hasSidebar ? "layout" : "layout layout-wide"}>
+        {tab === "anekdots" && (
+          <CategorySidebar
+            categories={categories}
+            selectedCategory={selectedCategory}
+            onSelect={handleSelectCategory}
+          />
+        )}
+        {tab === "collections" && (
+          <CollectionsSidebar
+            section={collectionSection}
+            mineCount={collections.length}
+            favoritesCount={favoriteCollections.length}
+            publicCount={publicCollections.length}
+            onSelect={setCollectionSection}
+          />
+        )}
 
         <main className="app-main">
           {tab === "anekdots" && (
@@ -420,18 +516,9 @@ export default function App() {
               emptyText="В этой категории пока нет анекдотов."
               notice={actionNotice}
               collections={collections}
-              onToggleLike={(target) => {
-                void handleToggleLike(target);
-              }}
-              onToggleFavorite={(target) => {
-                void handleToggleFavorite(target);
-              }}
-              onAddToCollection={(target, collectionId) => {
-                void handleAddToCollection(target, collectionId);
-              }}
-              onReload={() => {
-                void reloadAnecdots();
-              }}
+              onToggleLike={handleLikeAction}
+              onToggleFavorite={handleFavoriteAction}
+              onAddToCollection={handleCollectionAction}
               paging={{
                 page,
                 pageSize,
@@ -444,7 +531,14 @@ export default function App() {
               }}
             />
           )}
-          {tab === "external" && <ExternalPanel />}
+          {tab === "external" && (
+            <ExternalPanel
+              user={user}
+              onSaved={() => {
+                void loadLikes();
+              }}
+            />
+          )}
           {tab === "likes" && (
             <SavedPanel
               user={user}
@@ -460,18 +554,9 @@ export default function App() {
               busyID={busyID}
               notice={actionNotice}
               collections={collections}
-              onToggleLike={(target) => {
-                void handleToggleLike(target);
-              }}
-              onToggleFavorite={(target) => {
-                void handleToggleFavorite(target);
-              }}
-              onAddToCollection={(target, collectionId) => {
-                void handleAddToCollection(target, collectionId);
-              }}
-              onReload={() => {
-                void loadLikes();
-              }}
+              onToggleLike={handleLikeAction}
+              onToggleFavorite={handleFavoriteAction}
+              onAddToCollection={handleCollectionAction}
             />
           )}
           {tab === "favorites" && (
@@ -489,28 +574,24 @@ export default function App() {
               busyID={busyID}
               notice={actionNotice}
               collections={collections}
-              onToggleLike={(target) => {
-                void handleToggleLike(target);
-              }}
-              onToggleFavorite={(target) => {
-                void handleToggleFavorite(target);
-              }}
-              onAddToCollection={(target, collectionId) => {
-                void handleAddToCollection(target, collectionId);
-              }}
-              onReload={() => {
-                void loadFavorites();
-              }}
+              onToggleLike={handleLikeAction}
+              onToggleFavorite={handleFavoriteAction}
+              onAddToCollection={handleCollectionAction}
             />
           )}
           {tab === "collections" && (
             <CollectionsPanel
               user={user}
+              section={collectionSection}
               collections={collections}
               loading={collectionsLoading}
               error={collectionsError}
+              publicCollections={publicCollections}
+              publicLoading={publicCollectionsLoading}
+              publicError={publicCollectionsError}
+              favoriteCollections={favoriteCollections}
               onReload={() => {
-                void loadCollections();
+                void refreshCollections();
               }}
             />
           )}

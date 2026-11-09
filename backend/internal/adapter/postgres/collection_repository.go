@@ -73,7 +73,7 @@ func (r *CollectionRepository) ByID(
 	viewerID *int64,
 ) (domain.Collection, error) {
 	collection, err := r.scanOne(ctx, selectCollection+`
-	WHERE c.id = $3`, nil, nullableInt64(viewerID), id)
+		WHERE c.id = $3`, nil, nullable(viewerID), id)
 	if err != nil {
 		return domain.Collection{}, err
 	}

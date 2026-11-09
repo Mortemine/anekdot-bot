@@ -16,6 +16,7 @@ type userRepositoryStub struct {
 	byEmail   map[string]domain.Credentials
 	byID      map[int64]domain.User
 	nextID    int64
+	lookups   int
 	createErr error
 	lookupErr error
 }
@@ -45,6 +46,8 @@ func (s *userRepositoryStub) Create(_ context.Context, email, displayName, passw
 }
 
 func (s *userRepositoryStub) ByEmail(_ context.Context, email string) (domain.Credentials, error) {
+	s.lookups++
+
 	if s.lookupErr != nil {
 		return domain.Credentials{}, s.lookupErr
 	}
@@ -166,6 +169,7 @@ func TestAuthServiceRegisterRejects(t *testing.T) {
 	}{
 		{name: "empty email", email: "", password: "password123"},
 		{name: "malformed email", email: "not-an-email", password: "password123"},
+		{name: "over-long email", email: strings.Repeat("a", maxEmailLength) + "@example.com", password: "password123"},
 		{name: "short password", email: "reader@example.com", password: "short"},
 		{name: "long password", email: "reader@example.com", password: strings.Repeat("a", maxPasswordBytes+1)},
 		{name: "long multibyte password", email: "reader@example.com", password: strings.Repeat("я", 40)},
@@ -237,6 +241,7 @@ func TestAuthServiceLogin(t *testing.T) {
 		{name: "wrong password", email: "reader@example.com", password: "wrong-password"},
 		{name: "unknown email", email: "nobody@example.com", password: "password123"},
 		{name: "empty password", email: "reader@example.com", password: ""},
+		{name: "over-sized password", email: "reader@example.com", password: strings.Repeat("a", maxPasswordBytes+1)},
 		{name: "malformed email", email: "not-an-email", password: "password123"},
 	}
 
@@ -246,6 +251,32 @@ func TestAuthServiceLogin(t *testing.T) {
 				t.Fatalf("Login() error = %v, want ErrUnauthorized", err)
 			}
 		})
+	}
+}
+
+func TestAuthServiceLoginRejectsOversizedPasswordWithoutLookup(t *testing.T) {
+	service, users, _ := newAuthFixture()
+
+	_, err := service.Login(context.Background(), "reader@example.com", strings.Repeat("a", maxPasswordBytes+1))
+	if !errors.Is(err, domain.ErrUnauthorized) {
+		t.Fatalf("Login() error = %v, want ErrUnauthorized", err)
+	}
+
+	if users.lookups != 0 {
+		t.Fatalf("ByEmail() calls = %d, want 0", users.lookups)
+	}
+}
+
+func TestAuthServiceLoginAcceptsLongestPassword(t *testing.T) {
+	service, _, _ := newAuthFixture()
+	password := strings.Repeat("a", maxPasswordBytes)
+
+	if _, err := service.Register(context.Background(), "reader@example.com", password, ""); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	if _, err := service.Login(context.Background(), "reader@example.com", password); err != nil {
+		t.Fatalf("Login() error = %v", err)
 	}
 }
 

@@ -10,6 +10,7 @@ type Category struct {
 type CategorySummary struct {
 	Category
 	AnekdotCount int
+	Popularity   int
 }
 
 type Anekdot struct {
@@ -22,14 +23,6 @@ type Anekdot struct {
 	LikeCount     int
 	FavoriteCount int
 }
-
-type AnekdotSort string
-
-const (
-	AnekdotSortCreated   AnekdotSort = "created"
-	AnekdotSortLikes     AnekdotSort = "likes"
-	AnekdotSortFavorites AnekdotSort = "favorites"
-)
 
 type AnekdotPage struct {
 	Anekdots []Anekdot

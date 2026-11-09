@@ -39,6 +39,12 @@ const orderByLikes = `
 const orderByFavorites = `
 	ORDER BY favorite_count DESC, a.created_at DESC, a.id DESC`
 
+var anekdotOrderClauses = map[domain.AnekdotSort]string{
+	domain.AnekdotSortCreated:   orderByCreated,
+	domain.AnekdotSortLikes:     orderByLikes,
+	domain.AnekdotSortFavorites: orderByFavorites,
+}
+
 type AnekdotRepository struct {
 	pool *pgxpool.Pool
 }
@@ -48,73 +54,106 @@ func NewAnekdotRepository(pool *pgxpool.Pool) *AnekdotRepository {
 }
 
 func (r *AnekdotRepository) Random(ctx context.Context) (domain.Anekdot, error) {
-	anekdot, err := r.scanOne(ctx, selectAnekdot+` ORDER BY random() LIMIT 1`)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Anekdot{}, fmt.Errorf("%w: no anecdotes in database", domain.ErrNotFound)
-		}
-
-		return domain.Anekdot{}, fmt.Errorf("querying random anecdote: %w", err)
-	}
-
-	return anekdot, nil
+	return r.find(ctx, "random anecdote", selectAnekdot+` ORDER BY random() LIMIT 1`)
 }
 
 func (r *AnekdotRepository) RandomByCategory(ctx context.Context, categoryID int) (domain.Anekdot, error) {
-	anekdot, err := r.scanOne(
+	return r.find(
 		ctx,
+		fmt.Sprintf("random anecdote in category %d", categoryID),
 		selectAnekdot+` WHERE a.category_id = $1 ORDER BY random() LIMIT 1`,
 		categoryID,
 	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Anekdot{}, fmt.Errorf("%w: no anecdotes in category %d", domain.ErrNotFound, categoryID)
-		}
+}
 
-		return domain.Anekdot{}, fmt.Errorf("querying random anecdote in category %d: %w", categoryID, err)
+func (r *AnekdotRepository) find(
+	ctx context.Context,
+	description, query string,
+	args ...any,
+) (domain.Anekdot, error) {
+	anekdot, err := r.scanOne(ctx, query, args...)
+	if err == nil {
+		return anekdot, nil
 	}
 
-	return anekdot, nil
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Anekdot{}, fmt.Errorf("%w: %s", domain.ErrNotFound, description)
+	}
+
+	return domain.Anekdot{}, fmt.Errorf("querying %s: %w", description, err)
 }
 
 func (r *AnekdotRepository) CountsByCategory(ctx context.Context) (map[int]int, error) {
-	rows, err := r.pool.Query(ctx, `SELECT category_id, count(*) FROM anekdots GROUP BY category_id`)
+	return r.categoryTotals(
+		ctx,
+		`SELECT category_id, count(*) FROM anekdots GROUP BY category_id`,
+		"anecdote counts",
+	)
+}
+
+func (r *AnekdotRepository) PopularityByCategory(ctx context.Context) (map[int]int, error) {
+	return r.categoryTotals(ctx, `
+		WITH like_counts AS (
+		    SELECT a.category_id, count(*)::int AS total
+		    FROM likes l
+		    JOIN anekdots a ON a.id = l.anekdot_id
+		    GROUP BY a.category_id
+		), favorite_counts AS (
+		    SELECT a.category_id, count(*)::int AS total
+		    FROM favorites f
+		    JOIN anekdots a ON a.id = f.anekdot_id
+		    GROUP BY a.category_id
+		)
+		SELECT coalesce(l.category_id, f.category_id) AS category_id,
+		       coalesce(l.total, 0) + coalesce(f.total, 0) AS popularity
+		FROM like_counts l
+		FULL OUTER JOIN favorite_counts f ON f.category_id = l.category_id`,
+		"category popularity",
+	)
+}
+
+func (r *AnekdotRepository) categoryTotals(
+	ctx context.Context,
+	query, description string,
+) (map[int]int, error) {
+	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("querying anecdote counts: %w", err)
+		return nil, fmt.Errorf("querying %s: %w", description, err)
 	}
 	defer rows.Close()
 
-	counts := map[int]int{}
+	totals := map[int]int{}
 	for rows.Next() {
 		var (
 			categoryID int
-			count      int
+			total      int
 		)
-		if err := rows.Scan(&categoryID, &count); err != nil {
-			return nil, fmt.Errorf("scanning anecdote count: %w", err)
+		if err := rows.Scan(&categoryID, &total); err != nil {
+			return nil, fmt.Errorf("scanning %s: %w", description, err)
 		}
 
-		counts[categoryID] = count
+		totals[categoryID] = total
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating anecdote counts: %w", err)
+		return nil, fmt.Errorf("iterating %s: %w", description, err)
 	}
 
-	return counts, nil
+	return totals, nil
 }
 
 func (r *AnekdotRepository) ByID(ctx context.Context, id int64) (domain.Anekdot, error) {
-	anekdot, err := r.scanOne(ctx, selectAnekdot+` WHERE a.id = $1`, id)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Anekdot{}, fmt.Errorf("%w: anecdote %d", domain.ErrNotFound, id)
-		}
+	return r.find(ctx, fmt.Sprintf("anecdote %d", id), selectAnekdot+` WHERE a.id = $1`, id)
+}
 
-		return domain.Anekdot{}, fmt.Errorf("querying anecdote %d: %w", id, err)
-	}
-
-	return anekdot, nil
+func (r *AnekdotRepository) ByText(ctx context.Context, categoryID int, text string) (domain.Anekdot, error) {
+	return r.find(
+		ctx,
+		fmt.Sprintf("anecdote in category %d", categoryID),
+		selectAnekdot+` WHERE a.category_id = $1 AND md5(a.text) = md5($2)`,
+		categoryID,
+		text,
+	)
 }
 
 func (r *AnekdotRepository) Create(ctx context.Context, anekdot domain.Anekdot) (domain.Anekdot, error) {
@@ -131,7 +170,7 @@ func (r *AnekdotRepository) Create(ctx context.Context, anekdot domain.Anekdot) 
 		 JOIN categories c ON c.id = i.category_id`,
 		anekdot.CategoryID,
 		anekdot.Text,
-		nullableInt64(anekdot.AuthorID),
+		nullable(anekdot.AuthorID),
 	))
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -172,7 +211,7 @@ func (r *AnekdotRepository) List(
 	rows, err := r.pool.Query(
 		ctx,
 		selectAnekdot+anecdoteCategoryFilter+orderClause(sort)+anecdotePageSuffix,
-		nullableInt(categoryID),
+		nullable(categoryID),
 		limit,
 		offset,
 	)
@@ -187,7 +226,7 @@ func (r *AnekdotRepository) List(
 func (r *AnekdotRepository) Count(ctx context.Context, categoryID *int) (int, error) {
 	var total int
 	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM anekdots a WHERE ($1::int IS NULL OR a.category_id = $1)`,
-		nullableInt(categoryID),
+		nullable(categoryID),
 	).Scan(&total)
 	if err != nil {
 		return 0, fmt.Errorf("counting anecdotes: %w", err)
@@ -197,16 +236,11 @@ func (r *AnekdotRepository) Count(ctx context.Context, categoryID *int) (int, er
 }
 
 func orderClause(sort domain.AnekdotSort) string {
-	switch sort {
-	case domain.AnekdotSortLikes:
-		return orderByLikes
-	case domain.AnekdotSortFavorites:
-		return orderByFavorites
-	case domain.AnekdotSortCreated:
-		return orderByCreated
-	default:
-		return orderByCreated
+	if clause, ok := anekdotOrderClauses[sort]; ok {
+		return clause
 	}
+
+	return orderByCreated
 }
 
 func scanAnekdot(row pgx.Row) (domain.Anekdot, error) {
@@ -262,7 +296,7 @@ func int64Pointer(value pgtype.Int8) *int64 {
 	return &number
 }
 
-func nullableInt64(value *int64) any {
+func nullable[T any](value *T) any {
 	if value == nil {
 		return nil
 	}
@@ -270,16 +304,20 @@ func nullableInt64(value *int64) any {
 	return *value
 }
 
-func nullableInt(value *int) any {
-	if value == nil {
-		return nil
+func pgErrorCode(err error) string {
+	var pgErr *pgconn.PgError
+
+	if !errors.As(err, &pgErr) {
+		return ""
 	}
 
-	return *value
+	return pgErr.Code
 }
 
 func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
+	return pgErrorCode(err) == uniqueViolationCode
+}
 
-	return errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode
+func isForeignKeyViolation(err error) bool {
+	return pgErrorCode(err) == foreignKeyViolationCode
 }

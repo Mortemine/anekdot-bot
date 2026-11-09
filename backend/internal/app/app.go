@@ -40,11 +40,7 @@ func Run(ctx context.Context, cfg *config.Config, injector *do.RootScope, logger
 
 	select {
 	case serveErr := <-serverErrors:
-		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-			return fmt.Errorf("serving http: %w", serveErr)
-		}
-
-		return nil
+		return serveResult(serveErr)
 	case <-signalCtx.Done():
 		logger.Info("shutdown signal received")
 	}
@@ -59,4 +55,16 @@ func Run(ctx context.Context, cfg *config.Config, injector *do.RootScope, logger
 	logger.Info("http server stopped")
 
 	return nil
+}
+
+func serveResult(serveErr error) error {
+	if serveErr == nil {
+		return nil
+	}
+
+	if errors.Is(serveErr, http.ErrServerClosed) {
+		return nil
+	}
+
+	return fmt.Errorf("serving http: %w", serveErr)
 }

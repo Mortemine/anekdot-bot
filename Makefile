@@ -11,9 +11,10 @@ DB_NAME       ?= anekdot
 PG_SERVICE    ?= postgresql
 PG_ADMIN      ?= sudo -n -u postgres
 API_URL       ?= http://127.0.0.1:8080
+API_PORT      ?= 8080
 PSQL          := env PGPASSWORD=$(DB_PASSWORD) psql -h 127.0.0.1 -U $(DB_USER) -d $(DB_NAME) -P pager=off
 
-.PHONY: help db-start db-init db-reset db-setup dev check smoke build run test lint fmt vet tidy migrate-up migrate-down migrate-status seed frontend-install frontend-build frontend-dev clean
+.PHONY: help db-start db-init db-reset db-setup dev check smoke build run stop restart test lint fmt vet tidy migrate-up migrate-down migrate-status seed frontend-install frontend-build frontend-dev clean
 
 help:
 	@echo "db-start         start the local PostgreSQL cluster"
@@ -26,6 +27,8 @@ help:
 	@echo "smoke            curl the running API"
 	@echo "build            compile api, migrate and seed binaries"
 	@echo "run              run the API server"
+	@echo "stop             stop the API server listening on $(API_PORT)"
+	@echo "restart          stop, then run the API server again"
 	@echo "test             run Go tests"
 	@echo "lint             run golangci-lint"
 	@echo "fmt              format Go sources"
@@ -82,6 +85,19 @@ build:
 
 run:
 	env DATABASE_URL="$(DATABASE_URL)" DATA_DIR="$(DATA_DIR)" WEB_DIR="$(WEB_DIR)" $(GO) run ./backend/cmd/api
+
+stop:
+	@if fuser -s $(API_PORT)/tcp 2>/dev/null; then \
+		fuser -k $(API_PORT)/tcp > /dev/null 2>&1 || true; \
+		for i in $$(seq 1 30); do fuser -s $(API_PORT)/tcp 2>/dev/null || break; sleep 0.1; done; \
+		echo "api stopped (port $(API_PORT))"; \
+	else \
+		echo "api is not running (port $(API_PORT))"; \
+	fi
+
+restart:
+	@$(MAKE) --no-print-directory stop
+	@$(MAKE) --no-print-directory run
 
 test:
 	$(GO) test ./...
